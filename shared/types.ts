@@ -1,0 +1,98 @@
+export type PlayType = 
+  | 'SR' // Short Run
+  | 'LR' // Long Run
+  | 'SP' // Short Pass
+  | 'LP' // Long Pass
+  | 'TP' // Trick Play
+  | 'HM' // Hail Mary
+  | 'FG' // Field Goal
+  | 'PT' // Punt
+  | 'TO'; // Timeout
+
+export interface Card {
+  id: string;
+  type: PlayType;
+  name: string;
+  description?: string;
+  isSpecial?: boolean;
+}
+
+export interface PlayerHand {
+  cards: Card[];
+  maxSize: number;
+}
+
+export enum GamePhase {
+  LOBBY = 'LOBBY',
+  COIN_TOSS = 'COIN_TOSS',
+  OFFENSE_SELECT = 'OFFENSE_SELECT',
+  DEFENSE_SELECT = 'DEFENSE_SELECT',
+  RESOLUTION = 'RESOLUTION',
+  GAME_OVER = 'GAME_OVER'
+}
+
+export interface PlayResult {
+  playCalled: Card;
+  defenseCalled: Card;
+  delta: number;
+  yardsGained: number;
+  isTouchdown: boolean;
+  isTurnover: boolean;
+  isSafety: boolean;
+  multiplierCard: string;
+  yardCard: number;
+  message: string;
+}
+
+export interface PlayerState {
+  id: string;
+  username: string;
+  teamName: string;
+  score: number;
+  timeouts: number;
+  hailMaryCount: number;
+  canFieldGoal: boolean;
+  canPunt: boolean;
+  hand: Card[];
+  deckCount: number;
+  isHost: boolean;
+}
+
+export interface FieldState {
+  possessionPlayerId: string;
+  ballOn: number;
+  down: number;
+  toGo: number;
+  quarter: number;
+  clockSeconds: number;
+}
+
+export interface ServerGameState {
+  roomId: string;
+  phase: GamePhase;
+  players: {
+    home: PlayerState;
+    away: PlayerState;
+  };
+  field: FieldState;
+  pendingMove: {
+    offenseCardId?: string;
+    defenseCardId?: string;
+  };
+  lastPlay?: PlayResult;
+}
+
+export interface ClientGameState {
+  phase: GamePhase;
+  myState: PlayerState;
+  opponentState: {
+    username: string;
+    score: number;
+    timeouts: number;
+    deckCount: number;
+    handCount: number;
+  };
+  field: FieldState;
+  lastPlay?: PlayResult;
+  waitingForOpponent: boolean;
+}
