@@ -57,6 +57,12 @@ export class GameEngine {
     };
   }
 
+  public startGame() {
+    // Skip coin toss for now, just go straight to gameplay
+    this.state.phase = GamePhase.OFFENSE_SELECT;
+    this.syncState();
+  }
+
   public resolveTurn() {
     const { offenseCardId, defenseCardId } = this.state.pendingMove;
     
@@ -88,16 +94,31 @@ export class GameEngine {
       }
     } 
     
-    // CASE B: STANDARD PLAY
+    // --- CASE B: STANDARD PLAYS ---
     else {
       const quality = this.calculateDelta(offCard.type, defCard.type);
-      const multiplier = 2; // Mock: drawMultiplier(quality)
-      const baseYards = 3;  // Mock: drawYardCard()
+      const multiplier = 2; 
+      const baseYards = 3;  
       
       yardsGained = baseYards * multiplier;
       resultMessage = `Gain of ${yardsGained} yards! (${offCard.name} vs ${defCard.name})`;
     }
 
+    // 🔥 THE FIX: Save the result to state so the client can read it!
+    this.state.lastPlay = {
+      playCalled: offCard,
+      defenseCalled: defCard,
+      delta: 0, // we can store 'quality' here
+      yardsGained: yardsGained,
+      isTouchdown: false, 
+      isTurnover: false, 
+      isSafety: false, 
+      multiplierCard: "King", 
+      yardCard: 3, 
+      message: resultMessage
+    };
+
+    // 4. Physics: Move the Ball
     this.updateField(yardsGained, isHomeOffense);
 
     offHand.refill(isHomeOffense ? this.deckHome : this.deckAway);
