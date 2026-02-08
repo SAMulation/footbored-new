@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 interface FieldViewProps {
   ballOn: number;
@@ -8,24 +8,33 @@ interface FieldViewProps {
   animate?: boolean;
 }
 
-const TRACK_WIDTH = 300;
-const MARKER_OFFSET = 8;
+const BALL_SIZE = 18;
 
 function clampToField(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
 export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldViewProps) {
+  const { width: viewportWidth } = useWindowDimensions();
+
+  const trackWidth = useMemo(() => {
+    const widthPct = Platform.OS === 'web' ? 0.52 : 0.88;
+    const raw = viewportWidth * widthPct;
+    return Math.max(280, Math.min(760, Math.round(raw)));
+  }, [viewportWidth]);
+  const trackHeight = Platform.OS === 'web' ? 170 : 132;
+  const endZoneWidth = Math.max(24, Math.round(trackWidth * 0.08));
+
   const safeBallOn = clampToField(ballOn);
   const firstDownSpot = useMemo(() => {
     const raw = offenseSide === 'home' ? safeBallOn + toGo : safeBallOn - toGo;
     return clampToField(raw);
   }, [offenseSide, safeBallOn, toGo]);
 
-  const ballX = useRef(new Animated.Value((safeBallOn / 100) * TRACK_WIDTH)).current;
+  const ballX = useRef(new Animated.Value((safeBallOn / 100) * trackWidth)).current;
 
   useEffect(() => {
-    const target = (safeBallOn / 100) * TRACK_WIDTH;
+    const target = (safeBallOn / 100) * trackWidth;
     if (!animate) {
       ballX.setValue(target);
       return;
@@ -36,29 +45,74 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
       duration: 260,
       useNativeDriver: true,
     }).start();
-  }, [animate, ballX, safeBallOn]);
+  }, [animate, ballX, safeBallOn, trackWidth]);
 
-  const firstDownLeft = (firstDownSpot / 100) * TRACK_WIDTH;
+  const lineOfScrimmageLeft = (safeBallOn / 100) * trackWidth;
+  const firstDownLeft = (firstDownSpot / 100) * trackWidth;
+  const offenseDirectionLabel = offenseSide === 'home' ? 'Home driving ->' : 'Away driving <-';
+  const majorYards = Array.from({ length: 11 }, (_, idx) => idx * 10);
+  const hashYards = Array.from({ length: 21 }, (_, idx) => idx * 5);
+  const yardNumberLabels = ['10', '20', '30', '40', '50', '40', '30', '20', '10'];
+  const yardNumberPositions = [10, 20, 30, 40, 50, 60, 70, 80, 90];
 
   return (
     <View style={styles.container}>
-      <View style={styles.track}>
-        <View style={styles.hashRow}>
-          {Array.from({ length: 11 }).map((_, idx) => (
-            <View key={`hash-${idx}`} style={styles.hash} />
-          ))}
-        </View>
+      <View style={[styles.track, { width: trackWidth, height: trackHeight }]}>
+        <View style={[styles.endZone, styles.endZoneLeft, { width: endZoneWidth }]} />
+        <View style={[styles.endZone, styles.endZoneRight, { width: endZoneWidth }]} />
 
+        {majorYards.map((yard) => {
+          const left = Math.max(0, Math.min(trackWidth - 1, (yard / 100) * trackWidth));
+          return <View key={`major-${yard}`} style={[styles.majorLine, { left }]} />;
+        })}
+
+        {hashYards.map((yard) => {
+          const left = Math.max(0, Math.min(trackWidth - 2, (yard / 100) * trackWidth));
+          return (
+            <React.Fragment key={`hash-${yard}`}>
+              <View style={[styles.hashMark, { left, top: trackHeight * 0.24 }]} />
+              <View style={[styles.hashMark, { left, bottom: trackHeight * 0.24 }]} />
+            </React.Fragment>
+          );
+        })}
+
+        <View style={[styles.lineOfScrimmage, { left: lineOfScrimmageLeft }]} />
         <View style={[styles.firstDownLine, { left: firstDownLeft }]} />
 
-        <Animated.View style={[styles.ballMarker, { transform: [{ translateX: ballX }] }]}>
-          <View style={styles.ball} />
+        <Animated.View
+          style={[
+            styles.ballMarker,
+            {
+              left: -(BALL_SIZE / 2),
+              top: (trackHeight - BALL_SIZE) / 2,
+              transform: [{ translateX: ballX }],
+            },
+          ]}>
+          <View style={styles.ball}>
+            <View style={styles.ballLaces} />
+          </View>
         </Animated.View>
       </View>
 
-      <View style={styles.labels}>
-        <Text style={styles.labelText}>Ball: {safeBallOn}</Text>
-        <Text style={styles.labelText}>1st: {firstDownSpot}</Text>
+      <View style={[styles.yardNumberRow, { width: trackWidth }]}>
+        {yardNumberLabels.map((label, idx) => (
+          <Text
+            key={`yard-number-${label}-${idx}`}
+            style={[
+              styles.yardNumber,
+              {
+                left: `${yardNumberPositions[idx]}%`,
+              },
+            ]}>
+            {label}
+          </Text>
+        ))}
+      </View>
+
+      <View style={[styles.metaRow, { width: trackWidth }]}>
+        <Text style={styles.metaText}>Ball on {safeBallOn}</Text>
+        <Text style={styles.metaText}>Line to gain {firstDownSpot}</Text>
+        <Text style={styles.metaText}>{offenseDirectionLabel}</Text>
       </View>
     </View>
   );
@@ -68,33 +122,48 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 8,
+    gap: 6,
   },
   track: {
-    width: TRACK_WIDTH,
-    height: 110,
-    backgroundColor: '#2e7d32',
-    borderColor: '#1b5e20',
+    backgroundColor: '#2f7d35',
+    borderColor: '#1d5d24',
     borderWidth: 2,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    justifyContent: 'center',
   },
-  hashRow: {
+  endZone: {
     position: 'absolute',
-    left: 0,
-    right: 0,
     top: 0,
     bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(7, 43, 12, 0.38)',
   },
-  hash: {
+  endZoneLeft: {
+    left: 0,
+  },
+  endZoneRight: {
+    right: 0,
+  },
+  majorLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.33)',
+  },
+  hashMark: {
+    position: 'absolute',
     width: 2,
-    height: 60,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.62)',
+  },
+  lineOfScrimmage: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: '#f4f4f4',
+    opacity: 0.9,
   },
   firstDownLine: {
     position: 'absolute',
@@ -105,27 +174,46 @@ const styles = StyleSheet.create({
   },
   ballMarker: {
     position: 'absolute',
-    left: -MARKER_OFFSET,
-    top: 0,
-    bottom: 0,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   ball: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: BALL_SIZE,
+    height: BALL_SIZE,
+    borderRadius: BALL_SIZE / 2,
     backgroundColor: '#8d5524',
-    borderColor: '#fff',
+    borderColor: '#ffffff',
     borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  labels: {
-    marginTop: 10,
-    width: TRACK_WIDTH,
+  ballLaces: {
+    width: BALL_SIZE / 2.4,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+  },
+  yardNumberRow: {
+    height: 16,
+    position: 'relative',
+  },
+  yardNumber: {
+    position: 'absolute',
+    transform: [{ translateX: -10 }],
+    color: '#d8edd8',
+    fontSize: 11,
+    fontWeight: '700',
+    opacity: 0.9,
+  },
+  metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    rowGap: 3,
   },
-  labelText: {
-    color: '#d7f7d8',
+  metaText: {
+    color: '#deefd9',
     fontSize: 12,
     fontWeight: '700',
   },

@@ -99,3 +99,8 @@
 - Add reconnect-safe room state restoration and rejoin UX.
 - Add richer game-over details (per-play recap and quick rematch pairing behavior).
 - Expand UI tests around room/join/replay and action-button legality.
+
+## UX Roadmap Pointer
+- Browser UI/UX execution details are now tracked in `/Users/sam/Downloads/Projects/footbored-new/UX_ROADMAP.md`.
+- Keep this roadmap focused on product milestones and logic progression.
+- Keep UI implementation phases, acceptance checks, and component ownership in the dedicated UX roadmap file.
