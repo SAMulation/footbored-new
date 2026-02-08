@@ -5,15 +5,23 @@ import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
 import { PlayerHand, SpecialActionItem } from '@/components/game/PlayerHand';
 import { useGameSocket } from '../../hooks/use-game-socket';
-import { ClientGameState, PlayType } from '../../../shared/types';
+import { ClientGameState, GamePhase, PlayType } from '../../../shared/types';
 
-const SPECIAL_ACTIONS: { type: PlayType; label: string }[] = [
-  { type: 'TP', label: 'Trick Play' },
-  { type: 'HM', label: 'Hail Mary' },
-  { type: 'FG', label: 'Field Goal' },
-  { type: 'PT', label: 'Punt' },
-  { type: 'TO', label: 'Timeout' },
-];
+const SPECIAL_ACTION_LABELS: Record<PlayType, string> = {
+  SR: 'Short Run',
+  LR: 'Long Run',
+  SP: 'Short Pass',
+  LP: 'Long Pass',
+  TP: 'Trick Play',
+  HM: 'Hail Mary',
+  FG: 'Field Goal',
+  PT: 'Punt',
+  TO: 'Timeout',
+  XP: 'Extra Point',
+  '2PT': 'Two-Point',
+};
+
+const SPECIAL_ACTION_PRIORITY: PlayType[] = ['XP', '2PT', 'TP', 'HM', 'FG', 'PT', 'TO'];
 
 function generateRoomCode(): string {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -43,6 +51,18 @@ function formatLastPlayMessage(gameState: ClientGameState): string | null {
   if (flags?.icedKicker) {
     detailParts.push('Iced');
   }
+  if (flags?.conversionType) {
+    detailParts.push(`Conversion ${flags.conversionType}`);
+  }
+  if (typeof flags?.conversionSuccess === 'boolean') {
+    detailParts.push(flags.conversionSuccess ? 'Good' : 'Failed');
+  }
+  if (flags?.mandatoryTwoPoint) {
+    detailParts.push('Mandatory 2PT');
+  }
+  if (flags?.otBucketReset) {
+    detailParts.push('OT Bucket Reset');
+  }
 
   return detailParts.length > 0
     ? `${message}\n${detailParts.join(' | ')}`
@@ -64,6 +84,21 @@ function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { ti
     };
   }
   if (isMyTurn) {
+    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      const forced = gameState.conversion?.mandatoryTwoPoint;
+      return {
+        title: 'CONVERSION',
+        message: forced
+          ? 'Two-point conversion required in this overtime period.'
+          : 'Choose Extra Point or Two-Point conversion.',
+      };
+    }
+    if (gameState.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      return {
+        title: 'CONVERSION',
+        message: 'Select a standard play for the two-point attempt.',
+      };
+    }
     return {
       title: 'PICK YOUR PLAY',
       message: 'Select one card from your rail to resolve this down.',
@@ -221,9 +256,21 @@ export default function GameScreen() {
   const mySide = seat ?? (gameState?.myState.teamName === 'Away Team' ? 'away' : 'home');
   const possession = gameState?.field.possessionPlayerId === 'away' ? 'away' : 'home';
 
-  const isMyTurn = !!gameState &&
-    (gameState.phase === 'OFFENSE_SELECT' || gameState.phase === 'DEFENSE_SELECT') &&
-    !gameState.waitingForOpponent;
+  const isMyTurn = !!gameState && (() => {
+    if (gameState.waitingForOpponent) {
+      return false;
+    }
+    if (gameState.phase === GamePhase.OFFENSE_SELECT || gameState.phase === GamePhase.DEFENSE_SELECT) {
+      return true;
+    }
+    if (gameState.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      return true;
+    }
+    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      return gameState.conversion?.offenseSide === mySide;
+    }
+    return false;
+  })();
 
   const homeScore = gameState
     ? (mySide === 'home' ? gameState.myState.score : gameState.opponentState.score)
@@ -266,14 +313,22 @@ export default function GameScreen() {
       return [];
     }
 
-    return SPECIAL_ACTIONS
+    const toPriority = (type: PlayType) => {
+      const index = SPECIAL_ACTION_PRIORITY.indexOf(type);
+      return index === -1 ? 999 : index;
+    };
+
+    return gameState.myState.specialActions
+      .slice()
+      .sort((a, b) => toPriority(a.type) - toPriority(b.type))
       .map((action) => {
         const state = specialActionsByType.get(action.type);
         if (!state) return null;
+        const label = SPECIAL_ACTION_LABELS[action.type] ?? action.type;
         const suffix = state.remaining === null ? '' : ` (${state.remaining})`;
         return {
           cardId: state.id,
-          label: `${action.label}${suffix}`,
+          label: `${label}${suffix}`,
           enabled: state.enabled,
         };
       })

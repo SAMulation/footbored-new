@@ -41,6 +41,9 @@ function formatPhase(phase: GamePhase | null): string {
   if (phase === GamePhase.COIN_TOSS) return 'COIN TOSS';
   if (phase === GamePhase.OFFENSE_SELECT) return 'OFFENSE CALL';
   if (phase === GamePhase.DEFENSE_SELECT) return 'DEFENSE CALL';
+  if (phase === GamePhase.CONVERSION_OFFENSE_SELECT) return 'CONVERSION CALL';
+  if (phase === GamePhase.CONVERSION_DEFENSE_SELECT) return 'CONVERSION DEFENSE';
+  if (phase === GamePhase.CONVERSION_RESOLUTION) return 'CONVERSION RESULT';
   if (phase === GamePhase.RESOLUTION) return 'RESOLUTION';
   if (phase === GamePhase.GAME_OVER) return 'GAME OVER';
   if (phase === GamePhase.LOBBY) return 'LOBBY';
@@ -63,6 +66,13 @@ function resolvePrompt({
   if (phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT) {
     return isMyTurn ? 'Pick your play' : 'Opponent selecting';
   }
+  if (phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    return isMyTurn ? 'Choose XP or 2PT' : 'Opponent choosing conversion';
+  }
+  if (phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+    return isMyTurn ? 'Pick conversion play' : 'Opponent setting conversion defense';
+  }
+  if (phase === GamePhase.CONVERSION_RESOLUTION) return 'Resolving conversion';
   if (phase === GamePhase.RESOLUTION) return 'Resolving current play';
   if (phase === GamePhase.GAME_OVER) return 'Final whistle';
   if (phase === GamePhase.COIN_TOSS) return 'Coin toss in progress';
