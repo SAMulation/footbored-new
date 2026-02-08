@@ -109,6 +109,8 @@ export interface JoinGamePayload {
   roomId: string;
   playerToken?: string;
   requestedSeat?: 'home' | 'away';
+  quickPlayBot?: boolean;
+  botDifficulty?: 'easy' | 'normal';
 }
 
 export interface JoinGameAck {
@@ -116,4 +118,5 @@ export interface JoinGameAck {
   playerToken: string;
   seat: 'home' | 'away';
   rejoined: boolean;
+  mode?: 'MULTIPLAYER' | 'BOT';
 }

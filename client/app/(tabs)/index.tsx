@@ -22,10 +22,12 @@ export default function GameScreen() {
     isConnected,
     roomId,
     seat,
+    matchMode,
     isRejoining,
     joinError,
     lastJoinWasRejoin,
     joinGame,
+    quickPlayBot,
     playCard,
     playAgain,
   } = useGameSocket();
@@ -93,6 +95,10 @@ export default function GameScreen() {
         {!gameState ? (
           <View style={styles.centerBox}>
             <Text style={styles.title}>FootBored 6.0</Text>
+            <TouchableOpacity style={styles.quickPlayButton} onPress={quickPlayBot}>
+              <Text style={styles.quickPlayButtonText}>Quick Play (vs Bot)</Text>
+            </TouchableOpacity>
+            <Text style={styles.advancedLabel}>Advanced: Multiplayer Room</Text>
             <Text style={styles.roomLabel}>Room Code</Text>
             <TextInput
               value={roomInput}
@@ -115,6 +121,7 @@ export default function GameScreen() {
           </View>
         ) : (
           <>
+            {matchMode === 'BOT' && <Text style={styles.modeBadge}>BOT MATCH</Text>}
             <Text style={styles.roomBadge}>ROOM: {roomId ?? 'N/A'}</Text>
 
             <FieldView
@@ -218,6 +225,26 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   title: { fontSize: 24, color: 'white', fontWeight: 'bold', marginBottom: 20 },
+  quickPlayButton: {
+    width: '100%',
+    backgroundColor: '#f1c40f',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  quickPlayButtonText: {
+    color: '#1e1e1e',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  advancedLabel: {
+    color: '#c0d8c2',
+    fontWeight: '700',
+    fontSize: 11,
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
   roomLabel: { color: '#d9d9d9', fontWeight: '700', fontSize: 12, marginBottom: 6 },
   roomInput: {
     width: '100%',
@@ -264,6 +291,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 11,
     letterSpacing: 0.5,
+  },
+  modeBadge: {
+    color: '#1f1600',
+    backgroundColor: '#f1c40f',
+    fontWeight: '900',
+    fontSize: 11,
+    letterSpacing: 0.4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   gameText: { fontSize: 16, color: 'white', textAlign: 'center' },
   resultTitle: {

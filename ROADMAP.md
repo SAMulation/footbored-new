@@ -78,6 +78,23 @@
 - Milestone D:
   - Room lifecycle and reconnect workflows validated by scripted checks.
 
+## Browser Playability Mini-Roadmap
+- Slice 1 (this commit): Quick-play bot one-tab loop.
+  - Exit criteria:
+    - Browser user can click `Quick Play (vs Bot)` and start a match without second player.
+    - Server bot submits moves through `submitMove` only.
+    - `server test` and `sim:socket` include a bot quick-play scenario.
+- Slice 2: Browser multiplayer polish.
+  - Exit criteria:
+    - Join/create room flow includes explicit in-room waiting/lobby status.
+    - Rematch pairing keeps both players in same room without manual re-entry.
+    - Two-tab browser regression passes for 3+ consecutive downs.
+- Slice 3: Browser visual pass.
+  - Exit criteria:
+    - Hand, field, and HUD scale correctly on common desktop widths (1280/1440).
+    - Card readability and action affordances meet baseline clickability/usability.
+    - No layout overflow issues in Chrome and Safari web builds.
+
 ## Immediate Next Commit Checklist
 - Add reconnect-safe room state restoration and rejoin UX.
 - Add richer game-over details (per-play recap and quick rematch pairing behavior).

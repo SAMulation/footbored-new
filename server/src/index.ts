@@ -10,6 +10,7 @@ import { GameEngine, TeamSide } from './engine';
 export const REJOIN_TTL_MS = 10 * 60 * 1000;
 
 type Seat = 'home' | 'away';
+type BotDifficulty = 'easy' | 'normal';
 
 interface PlayerSession {
   token: string;
@@ -23,6 +24,9 @@ interface RoomContext {
   game: GameEngine;
   sessionsByToken: Map<string, PlayerSession>;
   tokenBySeat: Map<Seat, string>;
+  botEnabled: boolean;
+  botSeat: Seat | null;
+  botDifficulty: BotDifficulty;
 }
 
 function getSanitizedState(game: GameEngine, playerId: string): ClientGameState {
@@ -56,6 +60,9 @@ function createRoomContext(roomId: string): RoomContext {
     game: new GameEngine(roomId),
     sessionsByToken: new Map<string, PlayerSession>(),
     tokenBySeat: new Map<Seat, string>(),
+    botEnabled: false,
+    botSeat: null,
+    botDifficulty: 'normal',
   };
 }
 
@@ -89,13 +96,92 @@ function cleanupStaleSessions(room: RoomContext, now: number) {
 }
 
 function chooseSeat(room: RoomContext, requestedSeat?: Seat): Seat | null {
-  if (requestedSeat && !room.tokenBySeat.has(requestedSeat)) {
+  const seatTaken = (seat: Seat) => room.tokenBySeat.has(seat) || room.botSeat === seat;
+
+  if (requestedSeat && !seatTaken(requestedSeat)) {
     return requestedSeat;
   }
 
-  if (!room.tokenBySeat.has('home')) return 'home';
-  if (!room.tokenBySeat.has('away')) return 'away';
+  if (!seatTaken('home')) return 'home';
+  if (!seatTaken('away')) return 'away';
   return null;
+}
+
+function getOffenseSide(game: GameEngine): TeamSide {
+  return game.state.field.possessionPlayerId === 'away' ? 'away' : 'home';
+}
+
+function isSelectablePhase(phase: GamePhase): boolean {
+  return phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT;
+}
+
+function chooseBotCard(room: RoomContext): string | null {
+  if (!room.botSeat) {
+    return null;
+  }
+
+  const hand = room.game.state.players[room.botSeat].hand;
+  if (hand.length === 0) {
+    return null;
+  }
+
+  if (room.botDifficulty === 'easy') {
+    return hand[0].id;
+  }
+
+  const { down, toGo } = room.game.state.field;
+  if (down === 4) {
+    const punt = hand.find((card) => card.type === 'PT');
+    if (punt) {
+      return punt.id;
+    }
+  }
+
+  if (toGo <= 3) {
+    const short = hand.find((card) => card.type === 'SR' || card.type === 'SP');
+    if (short) {
+      return short.id;
+    }
+  } else {
+    const long = hand.find((card) => card.type === 'LR' || card.type === 'LP' || card.type === 'TP');
+    if (long) {
+      return long.id;
+    }
+  }
+
+  return hand[0].id;
+}
+
+function maybeRunBotTurn(io: Server, room: RoomContext) {
+  if (!room.botEnabled || !room.botSeat || !isSelectablePhase(room.game.state.phase)) {
+    return;
+  }
+
+  const offenseSide = getOffenseSide(room.game);
+  const slot = room.botSeat === offenseSide ? 'offenseCardId' : 'defenseCardId';
+  if (room.game.state.pendingMove[slot]) {
+    return;
+  }
+
+  const cardId = chooseBotCard(room);
+  if (!cardId) {
+    return;
+  }
+
+  const result = room.game.submitMove(room.botSeat, cardId);
+  if (!result.accepted) {
+    return;
+  }
+
+  if (!result.resolved) {
+    sendRoomState(io, room);
+    return;
+  }
+
+  sendRoomState(io, room);
+  room.game.advanceAfterResolution();
+  sendRoomState(io, room);
+  maybeRunBotTurn(io, room);
 }
 
 function sendRoomState(io: Server, room: RoomContext) {
@@ -145,6 +231,11 @@ export function createGameServer() {
 
       cleanupStaleSessions(room, now);
 
+      if (payload.quickPlayBot && !room.botEnabled && !payload.playerToken && room.tokenBySeat.size > 0) {
+        socket.emit('ERROR', 'Quick Play requires an empty room');
+        return;
+      }
+
       let session: PlayerSession | null = null;
       let rejoined = false;
 
@@ -160,6 +251,11 @@ export function createGameServer() {
       }
 
       if (!session) {
+        if (room.botEnabled && !payload.quickPlayBot) {
+          socket.emit('ERROR', 'Room is in BOT mode');
+          return;
+        }
+
         const seat = chooseSeat(room, payload.requestedSeat);
         if (!seat) {
           socket.emit('ERROR', 'Room is full');
@@ -179,9 +275,25 @@ export function createGameServer() {
       }
 
       applySessionToGameSeat(room, session);
+
+      if (payload.quickPlayBot) {
+        room.botEnabled = true;
+        room.botDifficulty = payload.botDifficulty ?? 'normal';
+        room.botSeat = session.seat === 'home' ? 'away' : 'home';
+
+        if (room.botSeat === 'home') {
+          room.game.state.players.home.id = 'BOT_HOME';
+        } else {
+          room.game.state.players.away.id = 'BOT_AWAY';
+        }
+      }
+
       socket.join(roomId);
 
-      if (room.tokenBySeat.has('home') && room.tokenBySeat.has('away') && room.game.state.phase === GamePhase.LOBBY) {
+      const hasHome = room.game.state.players.home.id !== 'home team';
+      const hasAway = room.game.state.players.away.id !== 'away team';
+
+      if (hasHome && hasAway && room.game.state.phase === GamePhase.LOBBY) {
         room.game.startGame();
       }
 
@@ -190,10 +302,12 @@ export function createGameServer() {
         playerToken: session.token,
         seat: session.seat,
         rejoined,
+        mode: room.botEnabled ? 'BOT' : 'MULTIPLAYER',
       };
 
       socket.emit('JOIN_GAME_ACK', ack);
       sendRoomState(io, room);
+      maybeRunBotTurn(io, room);
     });
 
     socket.on('PLAY_CARD', ({ roomId, cardId }) => {
@@ -227,12 +341,14 @@ export function createGameServer() {
 
       if (!result.resolved) {
         socket.emit('GAME_STATE_UPDATE', getSanitizedState(room.game, socket.id));
+        maybeRunBotTurn(io, room);
         return;
       }
 
       sendRoomState(io, room);
       room.game.advanceAfterResolution();
       sendRoomState(io, room);
+      maybeRunBotTurn(io, room);
     });
 
     socket.on('RESET_GAME', ({ roomId }) => {
@@ -264,7 +380,16 @@ export function createGameServer() {
         }
       }
 
+      if (room.botEnabled && room.botSeat) {
+        if (room.botSeat === 'home') {
+          room.game.state.players.home.id = 'BOT_HOME';
+        } else {
+          room.game.state.players.away.id = 'BOT_AWAY';
+        }
+      }
+
       sendRoomState(io, room);
+      maybeRunBotTurn(io, room);
     });
 
     socket.on('disconnect', () => {

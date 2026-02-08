@@ -19,6 +19,7 @@ export const useGameSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [seat, setSeat] = useState<'home' | 'away' | null>(null);
+  const [matchMode, setMatchMode] = useState<'MULTIPLAYER' | 'BOT' | null>(null);
   const [isRejoining, setIsRejoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [lastJoinWasRejoin, setLastJoinWasRejoin] = useState(false);
@@ -65,6 +66,7 @@ export const useGameSocket = () => {
       tokenByRoomRef.current[normalized] = ack.playerToken;
       setRoomId(normalized);
       setSeat(ack.seat);
+      setMatchMode(ack.mode ?? 'MULTIPLAYER');
       setJoinError(null);
       setIsRejoining(false);
       setLastJoinWasRejoin(ack.rejoined);
@@ -103,6 +105,25 @@ export const useGameSocket = () => {
     socketRef.current.emit('JOIN_GAME', payload);
   };
 
+  const quickPlayBot = () => {
+    if (!socketRef.current) return;
+
+    const generated = `BOT${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    setRoomId(generated);
+    currentRoomRef.current = generated;
+    setJoinError(null);
+    setIsRejoining(true);
+
+    const payload: JoinGamePayload = {
+      roomId: generated,
+      playerToken: tokenByRoomRef.current[generated],
+      quickPlayBot: true,
+      botDifficulty: 'normal',
+    };
+
+    socketRef.current.emit('JOIN_GAME', payload);
+  };
+
   const playCard = (cardId: string) => {
     if (socketRef.current && gameState && normalizedRoomId && !isRejoining) {
       socketRef.current.emit('PLAY_CARD', { roomId: normalizedRoomId, cardId });
@@ -120,10 +141,12 @@ export const useGameSocket = () => {
     isConnected,
     roomId: normalizedRoomId,
     seat,
+    matchMode,
     isRejoining,
     joinError,
     lastJoinWasRejoin,
     joinGame,
+    quickPlayBot,
     playCard,
     playAgain,
   };

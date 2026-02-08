@@ -91,16 +91,7 @@ function pause(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-async function main() {
-  const { httpServer, rooms } = createGameServer();
-  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
-
-  const address = httpServer.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Unable to resolve server port');
-  }
-
-  const url = `http://127.0.0.1:${address.port}`;
+async function runReconnectScenario(url: string, rooms: Map<string, any>) {
   const roomId = `ROOM${Date.now().toString().slice(-6)}`;
 
   let home = await connectClient(url);
@@ -183,7 +174,7 @@ async function main() {
       }
 
       const currentHomeState = readHomeState();
-      if (currentHomeState && (currentHomeState.phase === GamePhase.OFFENSE_SELECT || currentHomeState.phase === GamePhase.DEFENSE_SELECT) && !currentHomeState.waitingForOpponent) {
+      if (currentHomeState && isSelectablePhase(currentHomeState.phase) && !currentHomeState.waitingForOpponent) {
         const turnKey = `${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
         if (submittedTurnKey.get('home') !== turnKey) {
           const cardId = chooseCard(currentHomeState);
@@ -195,7 +186,7 @@ async function main() {
       }
 
       const currentAwayState = readAwayState();
-      if (currentAwayState && (currentAwayState.phase === GamePhase.OFFENSE_SELECT || currentAwayState.phase === GamePhase.DEFENSE_SELECT) && !currentAwayState.waitingForOpponent) {
+      if (currentAwayState && isSelectablePhase(currentAwayState.phase) && !currentAwayState.waitingForOpponent) {
         const turnKey = `${currentAwayState.field.quarter}:${currentAwayState.field.clockSeconds}:${currentAwayState.field.down}:${currentAwayState.field.toGo}:${currentAwayState.field.ballOn}`;
         if (submittedTurnKey.get('away') !== turnKey) {
           const cardId = chooseCard(currentAwayState);
@@ -207,17 +198,91 @@ async function main() {
       }
 
       if (hasRejoined && resolutions >= 3 && sawZeroSecondWindow && sawOvertime) {
-        console.log('Socket regression passed (rejoin continuity + valid transitions + legal field state).');
         return;
       }
 
       await pause(50);
     }
 
-    throw new Error('Regression timeout before rejoin + zero-second + overtime assertions completed');
+    throw new Error('Reconnect scenario timed out');
   } finally {
     home.disconnect();
     away.disconnect();
+  }
+}
+
+function isSelectablePhase(phase: string): boolean {
+  return phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT;
+}
+
+async function runBotQuickPlayScenario(url: string) {
+  const roomId = `BOT${Date.now().toString().slice(-6)}`;
+  const client = await connectClient(url);
+
+  let state: ClientState | null = null;
+  const readState = (): ClientState | null => state;
+  let prevPhase: string | null = null;
+  let resolutions = 0;
+  const seenResolutionKeys = new Set<string>();
+
+  client.on('GAME_STATE_UPDATE', (next: ClientState) => {
+    assert(next.field.ballOn >= 0 && next.field.ballOn <= 100, 'bot scenario ballOn out of range');
+    assert(isValidTransition(prevPhase, next.phase), `invalid bot transition ${prevPhase} -> ${next.phase}`);
+    prevPhase = next.phase;
+    state = next;
+
+    if (next.phase === GamePhase.RESOLUTION && next.lastPlay) {
+      const key = `${next.field.quarter}:${next.field.clockSeconds}:${next.lastPlay.message}:${next.lastPlay.yardsGained}`;
+      if (!seenResolutionKeys.has(key)) {
+        seenResolutionKeys.add(key);
+        resolutions += 1;
+      }
+    }
+  });
+
+  const ack = await emitJoin(client, { roomId, quickPlayBot: true });
+  assert.equal(ack.mode, 'BOT');
+
+  const start = Date.now();
+  try {
+    while (Date.now() - start < 12000) {
+      const currentState = readState();
+      if (currentState && isSelectablePhase(currentState.phase) && !currentState.waitingForOpponent) {
+        const cardId = chooseCard(currentState);
+        if (cardId) {
+          client.emit('PLAY_CARD', { roomId, cardId });
+        }
+      }
+
+      if (resolutions >= 3) {
+        return;
+      }
+
+      await pause(50);
+    }
+
+    throw new Error('Bot quick-play scenario timed out');
+  } finally {
+    client.disconnect();
+  }
+}
+
+async function main() {
+  const { httpServer, rooms } = createGameServer();
+  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+
+  const address = httpServer.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Unable to resolve server port');
+  }
+
+  const url = `http://127.0.0.1:${address.port}`;
+
+  try {
+    await runReconnectScenario(url, rooms);
+    await runBotQuickPlayScenario(url);
+    console.log('Socket regression passed (rejoin + overtime/zero-second + bot quick-play).');
+  } finally {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   }
 }
