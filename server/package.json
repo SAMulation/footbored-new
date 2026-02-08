@@ -9,7 +9,8 @@
     "start": "node dist/server/src/index.js",
     "test": "tsx --test src/__tests__/*.test.ts",
     "cli:play": "tsx src/cli/play-terminal.ts",
-    "sim:socket": "tsx src/simulation/socket-regression.ts"
+    "sim:socket": "tsx src/simulation/socket-regression.ts",
+    "sim:trace": "tsx src/simulation/state-trace.ts"
   },
   "keywords": [],
   "author": "",

@@ -93,4 +93,7 @@ npm --prefix /Users/sam/Downloads/Projects/footbored-new/client run lint
 ```bash
 ./scripts/validate-all.sh
 ./scripts/playtest-web.sh
+./scripts/trace-state.sh --seed TRACE-01 --max-steps 350
 ```
+
+`trace-state.sh` writes a readable step-by-step trace file under `server/.artifacts/traces/` by default.
