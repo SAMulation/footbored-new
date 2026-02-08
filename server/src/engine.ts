@@ -17,6 +17,7 @@ import {
   TrickPlayOutcomeCode,
   YARD_CARD_SEQUENCE,
 } from './rules/canonical';
+import { RULE_ASSUMPTIONS } from './rules/assumptions';
 
 export type TeamSide = 'home' | 'away';
 
@@ -29,6 +30,11 @@ export interface SubmitMoveResult {
 interface MatchupFlags {
   defPenalty?: boolean;
   kickoffTouchback?: boolean;
+  kickType?: 'KICKOFF' | 'PUNT' | 'FIELD_GOAL';
+  kickDistance?: number;
+  returnYards?: number;
+  kickResultSpot?: number;
+  icedKicker?: boolean;
 }
 
 interface MatchupResult {
@@ -50,6 +56,7 @@ interface MatchupResult {
 interface BallResolution {
   touchdown: boolean;
   safety: boolean;
+  flags?: MatchupFlags;
 }
 
 interface SamePlayOverrides {
@@ -70,7 +77,6 @@ const FIELD_GOAL_POINTS = 3;
 const SAFETY_POINTS = 2;
 const PLAY_CLOCK_TICK_SECONDS = 30;
 const QUARTER_SECONDS = 900;
-const MIDFIELD_SPOT = 50;
 const STANDARD_PLAYS: StandardPlayType[] = ['SR', 'LR', 'SP', 'LP'];
 const SPECIAL_PLAYS: PlayType[] = ['TP', 'HM', 'FG', 'PT', 'TO'];
 const SPECIAL_CARD_PREFIX = 'SPECIAL';
@@ -317,11 +323,16 @@ export class GameEngine {
       }
     } else {
       ballResolution = this.applyBallAndPossession(outcome.yards, offenseSide, outcome);
-      isTurnover = outcome.forceTurnover || this.applyDownAndDistance(offenseSide, outcome, ballResolution.touchdown, ballResolution.safety);
+      isTurnover = this.applyDownAndDistance(offenseSide, outcome, ballResolution.touchdown, ballResolution.safety);
     }
 
+    const combinedFlags: MatchupFlags = {
+      ...(outcome.flags ?? {}),
+      ...(ballResolution.flags ?? {}),
+    };
+
     const zeroSecondPlay = !outcome.noClockTick && !this.state.field.isOvertime
-      ? this.tickGameClock(outcome.flags)
+      ? this.tickGameClock(combinedFlags)
       : false;
 
     this.state.lastPlay = {
@@ -338,9 +349,14 @@ export class GameEngine {
         ? `${outcome.message} Two-point conversion good.`
         : outcome.message,
       flags: {
-        defPenalty: outcome.flags?.defPenalty,
+        defPenalty: combinedFlags.defPenalty,
         zeroSecondPlay,
-        kickoffTouchback: outcome.flags?.kickoffTouchback,
+        kickoffTouchback: combinedFlags.kickoffTouchback,
+        kickType: combinedFlags.kickType,
+        kickDistance: combinedFlags.kickDistance,
+        returnYards: combinedFlags.returnYards,
+        kickResultSpot: combinedFlags.kickResultSpot,
+        icedKicker: combinedFlags.icedKicker,
       },
     };
 
@@ -527,15 +543,18 @@ export class GameEngine {
         };
       }
 
+      const punt = this.resolvePuntOutcome(offenseSide, `${turnSeed}|punt`);
+
       return {
-        delta: 0,
-        yards: 35,
-        message: 'Punt for 35 yards.',
+        delta: punt.yards >= 0 ? 0 : -1,
+        yards: punt.yards,
+        message: punt.message,
         forceTurnover: true,
         keepDefenseCard: true,
         noDownProgress: true,
         multiplierCard: 'PT',
-        yardCard: 35,
+        yardCard: Math.abs(punt.yards),
+        flags: punt.flags,
       };
     }
 
@@ -549,8 +568,11 @@ export class GameEngine {
 
       if (made) {
         this.state.players[offenseSide].score += FIELD_GOAL_POINTS;
+        const kickoffFlags = !this.state.field.isOvertime
+          ? this.applyKickoff(this.getOpponentSide(offenseSide), 'field_goal', this.createKickSeed('field_goal'))
+          : undefined;
         if (!this.state.field.isOvertime) {
-          this.resetForKickoff(this.getOpponentSide(offenseSide));
+          // kickoff placement handled by applyKickoff in regulation.
         }
         return {
           delta: 1,
@@ -560,6 +582,7 @@ export class GameEngine {
           noDownProgress: true,
           multiplierCard: 'FG',
           yardCard: 0,
+          flags: kickoffFlags,
         };
       }
 
@@ -916,6 +939,120 @@ export class GameEngine {
     };
   }
 
+  private deterministicInt(seed: string, min: number, max: number): number {
+    const boundedMin = Math.min(min, max);
+    const boundedMax = Math.max(min, max);
+    const span = boundedMax - boundedMin + 1;
+    return boundedMin + hashToIndex(seed, span);
+  }
+
+  private resolvePuntOutcome(offenseSide: TeamSide, seed: string): { yards: number; message: string; flags: MatchupFlags } {
+    const startBall = this.state.field.ballOn;
+    const direction = offenseSide === 'home' ? 1 : -1;
+    const grossYards = this.deterministicInt(seed + '|gross', RULE_ASSUMPTIONS.punt.grossYardsMin, RULE_ASSUMPTIONS.punt.grossYardsMax);
+    const landingSpot = startBall + direction * grossYards;
+
+    const overEndLine = (offenseSide === 'home' && landingSpot >= 100)
+      || (offenseSide === 'away' && landingSpot <= 0);
+
+    if (overEndLine) {
+      const receivingSide = this.getOpponentSide(offenseSide);
+      const touchbackSpot = RULE_ASSUMPTIONS.punt.touchbackSpot;
+      const touchbackAbsolute = receivingSide === 'home' ? touchbackSpot : 100 - touchbackSpot;
+      const netYards = (touchbackAbsolute - startBall) / direction;
+
+      return {
+        yards: netYards,
+        message: `Punt ${grossYards} yards, touchback to ${touchbackSpot}.`,
+        flags: {
+          kickType: 'PUNT',
+          kickDistance: grossYards,
+          returnYards: 0,
+          kickoffTouchback: true,
+          kickResultSpot: touchbackAbsolute,
+        },
+      };
+    }
+
+    const returnYards = this.deterministicInt(seed + '|return', RULE_ASSUMPTIONS.punt.returnYardsMin, RULE_ASSUMPTIONS.punt.returnYardsMax);
+    const finalSpot = Math.max(1, Math.min(99, landingSpot - direction * returnYards));
+    const netYards = (finalSpot - startBall) / direction;
+
+    return {
+      yards: netYards,
+      message: `Punt ${grossYards} yards, return ${returnYards}.`,
+      flags: {
+        kickType: 'PUNT',
+        kickDistance: grossYards,
+        returnYards,
+        kickoffTouchback: false,
+        kickResultSpot: finalSpot,
+      },
+    };
+  }
+
+  private createKickSeed(reason: 'touchdown' | 'field_goal' | 'safety'): string {
+    const { quarter, clockSeconds, down, toGo, ballOn, overtimePeriod } = this.state.field;
+    return [
+      this.state.roomId,
+      'KICK',
+      reason,
+      quarter,
+      clockSeconds,
+      down,
+      toGo,
+      ballOn,
+      overtimePeriod ?? 0,
+      this.state.players.home.score,
+      this.state.players.away.score,
+    ].join('|');
+  }
+
+  private applyKickoff(
+    receivingSide: TeamSide,
+    reason: 'touchdown' | 'field_goal' | 'safety',
+    seed: string
+  ): MatchupFlags {
+    let kickoffTouchback = false;
+    let returnYards = 0;
+    let receivingForwardSpot: number;
+
+    if (reason === 'safety') {
+      receivingForwardSpot = RULE_ASSUMPTIONS.kickoff.safetyKickSpot;
+    } else {
+      const touchbackThreshold = Math.floor(RULE_ASSUMPTIONS.kickoff.touchbackRate * 1000);
+      kickoffTouchback = hashToIndex(seed + '|kickoff-touchback', 1000) < touchbackThreshold;
+
+      if (kickoffTouchback) {
+        receivingForwardSpot = RULE_ASSUMPTIONS.kickoff.touchbackSpot;
+      } else {
+        receivingForwardSpot = this.deterministicInt(
+          seed + '|kickoff-return-spot',
+          RULE_ASSUMPTIONS.kickoff.returnSpotMin,
+          RULE_ASSUMPTIONS.kickoff.returnSpotMax
+        );
+        returnYards = Math.max(0, RULE_ASSUMPTIONS.kickoff.returnSpotMax - receivingForwardSpot);
+      }
+    }
+
+    const absoluteSpot = receivingSide === 'home'
+      ? receivingForwardSpot
+      : 100 - receivingForwardSpot;
+
+    this.state.field.ballOn = absoluteSpot;
+    this.state.field.possessionPlayerId = receivingSide;
+    this.state.field.down = 1;
+    this.state.field.toGo = 10;
+
+    return {
+      kickType: 'KICKOFF',
+      kickDistance: reason === 'safety' ? RULE_ASSUMPTIONS.kickoff.safetyKickSpot : 65,
+      returnYards,
+      kickoffTouchback,
+      kickResultSpot: absoluteSpot,
+    };
+  }
+
   private createTurnSeed(offenseType: PlayType, defenseType: PlayType): string {
     const { quarter, clockSeconds, down, toGo, ballOn, overtimePeriod } = this.state.field;
     return [
@@ -949,19 +1086,25 @@ export class GameEngine {
 
     if (nextForwardBall >= 100) {
       this.state.players[offenseSide].score += GAME_CONFIG.TOUCHDOWN_POINTS;
+      const kickoffFlags = !this.state.field.isOvertime
+        ? this.applyKickoff(this.getOpponentSide(offenseSide), 'touchdown', this.createKickSeed('touchdown'))
+        : undefined;
       if (!this.state.field.isOvertime) {
-        this.resetForKickoff(this.getOpponentSide(offenseSide));
+        // kickoff placement handled by applyKickoff in regulation.
       }
-      return { touchdown: true, safety: false };
+      return { touchdown: true, safety: false, flags: kickoffFlags };
     }
 
     if (nextForwardBall < 0) {
       const defenseSide = this.getOpponentSide(offenseSide);
       this.state.players[defenseSide].score += SAFETY_POINTS;
+      const kickoffFlags = !this.state.field.isOvertime
+        ? this.applyKickoff(defenseSide, 'safety', this.createKickSeed('safety'))
+        : undefined;
       if (!this.state.field.isOvertime) {
-        this.resetForKickoff(defenseSide);
+        // kickoff placement handled by applyKickoff in regulation.
       }
-      return { touchdown: false, safety: true };
+      return { touchdown: false, safety: true, flags: kickoffFlags };
     }
 
     const boundedForward = Math.max(0, Math.min(100, nextForwardBall));
@@ -1017,6 +1160,10 @@ export class GameEngine {
         this.handleEndOfPeriod();
       }
       return true;
+    }
+
+    if (flags?.defPenalty || flags?.kickoffTouchback) {
+      return false;
     }
 
     this.state.field.clockSeconds -= PLAY_CLOCK_TICK_SECONDS;
@@ -1093,13 +1240,6 @@ export class GameEngine {
 
   private flipPossession() {
     this.state.field.possessionPlayerId = this.getOpponentSide(this.getOffenseSide());
-    this.state.field.down = 1;
-    this.state.field.toGo = 10;
-  }
-
-  private resetForKickoff(receivingSide: TeamSide) {
-    this.state.field.ballOn = MIDFIELD_SPOT;
-    this.state.field.possessionPlayerId = receivingSide;
     this.state.field.down = 1;
     this.state.field.toGo = 10;
   }

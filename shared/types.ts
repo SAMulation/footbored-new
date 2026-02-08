@@ -54,6 +54,11 @@ export interface PlayResult {
     defPenalty?: boolean;
     zeroSecondPlay?: boolean;
     kickoffTouchback?: boolean;
+    kickType?: 'KICKOFF' | 'PUNT' | 'FIELD_GOAL';
+    kickDistance?: number;
+    returnYards?: number;
+    kickResultSpot?: number;
+    icedKicker?: boolean;
   };
 }
 

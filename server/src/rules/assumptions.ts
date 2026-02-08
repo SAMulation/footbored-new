@@ -6,6 +6,7 @@ export interface DistanceBand {
 export interface RuleAssumptions {
   readonly version: string;
   readonly kickoff: {
+    readonly touchbackRate: number;
     readonly touchbackSpot: number;
     readonly returnSpotMin: number;
     readonly returnSpotMax: number;
@@ -35,6 +36,7 @@ const FIELD_GOAL_DISTANCE_BANDS: readonly DistanceBand[] = Object.freeze([
 export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
   version: '2026-02-08-kick-open-rules-v1',
   kickoff: Object.freeze({
+    touchbackRate: 0.34,
     touchbackSpot: 25,
     returnSpotMin: 18,
     returnSpotMax: 34,

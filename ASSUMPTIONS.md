@@ -36,3 +36,15 @@ This file is append-only and tracks provisional implementation assumptions used 
 - Rationale: Improves practical playability quickly while preserving option to tune hand size and inventory model later.
 - Verification: `server/src/__tests__/special-actions.test.ts` and bot/socket regressions.
 - Status: ACTIVE
+
+### 2026-02-08 - R-KICK-002 (Kickoff Placement)
+- Decision: Kickoff uses deterministic touchback probability (`0.34`) and deterministic return placement in configured range (`18..34`); touchback starts at the `25`.
+- Rationale: Provides stable multiplayer behavior while remaining football-shaped and reviewable.
+- Verification: `server/src/__tests__/kicking-flow.test.ts` kickoff touchback/return tests.
+- Status: ACTIVE
+
+### 2026-02-08 - R-KICK-001 (Punt Mechanics)
+- Decision: Punt uses deterministic gross distance (`36..52`) and deterministic return (`0..18`) with touchback to receiving `20`.
+- Rationale: Closes punt branch with deterministic net/spot transitions for full-game playability.
+- Verification: `server/src/__tests__/kicking-flow.test.ts` punt flow/touchback tests.
+- Status: ACTIVE

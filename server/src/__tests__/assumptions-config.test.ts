@@ -26,6 +26,7 @@ test('field-goal distance bands are monotonic and bounded', () => {
 
 test('kick assumptions stay in legal football ranges', () => {
   assert(RULE_ASSUMPTIONS.kickoff.touchbackSpot >= 20 && RULE_ASSUMPTIONS.kickoff.touchbackSpot <= 30);
+  assert(RULE_ASSUMPTIONS.kickoff.touchbackRate > 0 && RULE_ASSUMPTIONS.kickoff.touchbackRate < 1);
   assert(RULE_ASSUMPTIONS.kickoff.returnSpotMin < RULE_ASSUMPTIONS.kickoff.returnSpotMax);
 
   assert(RULE_ASSUMPTIONS.punt.grossYardsMin > 0);
