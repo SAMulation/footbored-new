@@ -7,7 +7,11 @@ export type PlayType =
   | 'HM' // Hail Mary
   | 'FG' // Field Goal
   | 'PT' // Punt
-  | 'TO'; // Timeout
+  | 'TO' // Timeout
+  | 'XP' // Extra Point
+  | '2PT'; // Two-Point Attempt
+
+export type ConversionType = 'XP' | '2PT';
 
 export interface Card {
   id: string;
@@ -35,6 +39,9 @@ export enum GamePhase {
   COIN_TOSS = 'COIN_TOSS',
   OFFENSE_SELECT = 'OFFENSE_SELECT',
   DEFENSE_SELECT = 'DEFENSE_SELECT',
+  CONVERSION_OFFENSE_SELECT = 'CONVERSION_OFFENSE_SELECT',
+  CONVERSION_DEFENSE_SELECT = 'CONVERSION_DEFENSE_SELECT',
+  CONVERSION_RESOLUTION = 'CONVERSION_RESOLUTION',
   RESOLUTION = 'RESOLUTION',
   GAME_OVER = 'GAME_OVER'
 }
@@ -59,7 +66,17 @@ export interface PlayResult {
     returnYards?: number;
     kickResultSpot?: number;
     icedKicker?: boolean;
+    conversionType?: ConversionType;
+    conversionSuccess?: boolean;
+    mandatoryTwoPoint?: boolean;
+    otBucketReset?: boolean;
   };
+}
+
+export interface ConversionState {
+  offenseSide: 'home' | 'away';
+  attemptType: ConversionType | null;
+  mandatoryTwoPoint: boolean;
 }
 
 export interface PlayerState {
@@ -101,6 +118,7 @@ export interface ServerGameState {
     offenseCardId?: string;
     defenseCardId?: string;
   };
+  conversion: ConversionState | null;
   lastPlay?: PlayResult;
 }
 
@@ -115,6 +133,7 @@ export interface ClientGameState {
     handCount: number;
   };
   field: FieldState;
+  conversion: ConversionState | null;
   lastPlay?: PlayResult;
   waitingForOpponent: boolean;
 }

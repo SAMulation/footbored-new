@@ -1,4 +1,12 @@
-import { Card, GamePhase, PlayType, PlayerState, ServerGameState, SpecialActionState } from '../../shared/types';
+import {
+  Card,
+  ConversionType,
+  GamePhase,
+  PlayType,
+  PlayerState,
+  ServerGameState,
+  SpecialActionState,
+} from '../../shared/types';
 import { GAME_CONFIG } from '../../shared/constants';
 import { Deck } from './models/Deck';
 import { Hand } from './models/Hand';
@@ -35,6 +43,10 @@ interface MatchupFlags {
   returnYards?: number;
   kickResultSpot?: number;
   icedKicker?: boolean;
+  conversionType?: ConversionType;
+  conversionSuccess?: boolean;
+  mandatoryTwoPoint?: boolean;
+  otBucketReset?: boolean;
 }
 
 interface MatchupResult {
@@ -74,11 +86,15 @@ interface CardSelection {
 }
 
 const FIELD_GOAL_POINTS = 3;
+const EXTRA_POINT_POINTS = 1;
+const TWO_POINT_POINTS = 2;
 const SAFETY_POINTS = 2;
 const PLAY_CLOCK_TICK_SECONDS = 30;
 const QUARTER_SECONDS = 900;
 const STANDARD_PLAYS: StandardPlayType[] = ['SR', 'LR', 'SP', 'LP'];
-const SPECIAL_PLAYS: PlayType[] = ['TP', 'HM', 'FG', 'PT', 'TO'];
+const BASE_SPECIAL_PLAYS: PlayType[] = ['TP', 'HM', 'FG', 'PT', 'TO'];
+const CONVERSION_SPECIAL_PLAYS: ConversionType[] = ['XP', '2PT'];
+const SPECIAL_PLAYS: PlayType[] = [...BASE_SPECIAL_PLAYS, ...CONVERSION_SPECIAL_PLAYS];
 const SPECIAL_CARD_PREFIX = 'SPECIAL';
 
 export class RuleNotImplementedError extends Error {
@@ -133,6 +149,7 @@ export class GameEngine {
     home: 1,
     away: 1,
   };
+  private pendingOtBucketReset = false;
 
   constructor(roomId: string) {
     this.overtimeCoinWinner = hashToIndex(`${roomId}|ot-coin`, 2) === 0 ? 'home' : 'away';
@@ -156,6 +173,7 @@ export class GameEngine {
         awaitingZeroSecondPlay: false,
       },
       pendingMove: {},
+      conversion: null,
     };
 
     this.dealInitialHands();
@@ -168,6 +186,12 @@ export class GameEngine {
   }
 
   public submitMove(side: TeamSide, cardId: string): SubmitMoveResult {
+    if (this.state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      return this.submitConversionAttemptChoice(side, cardId);
+    }
+    if (this.state.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      return this.submitConversionPlay(side, cardId);
+    }
     if (this.state.phase !== GamePhase.OFFENSE_SELECT && this.state.phase !== GamePhase.DEFENSE_SELECT) {
       return { accepted: false, resolved: false, reason: 'not_select_phase' };
     }
@@ -213,16 +237,24 @@ export class GameEngine {
   }
 
   public advanceAfterResolution(): void {
-    if (this.state.phase !== GamePhase.RESOLUTION) {
+    if (this.state.phase !== GamePhase.RESOLUTION && this.state.phase !== GamePhase.CONVERSION_RESOLUTION) {
+      return;
+    }
+
+    if (this.state.phase === GamePhase.CONVERSION_RESOLUTION) {
+      this.finishConversionSequence();
+      this.syncState();
       return;
     }
 
     if (!this.state.field.isOvertime && this.state.field.quarter >= 4 && this.state.field.clockSeconds <= 0 && !this.state.field.awaitingZeroSecondPlay) {
       this.state.phase = GamePhase.GAME_OVER;
+      this.syncState();
       return;
     }
 
     this.state.phase = this.getSelectionPhase();
+    this.syncState();
   }
 
   public resetForRematch(): void {
@@ -247,11 +279,13 @@ export class GameEngine {
     };
 
     this.state.pendingMove = {};
+    this.state.conversion = null;
     this.state.lastPlay = undefined;
     this.state.phase = GamePhase.LOBBY;
     this.overtimePossessionsCompleted = 0;
     this.standardPlaysUsedBySide = { home: 0, away: 0 };
     this.trickPlayChargesBySide = { home: 1, away: 1 };
+    this.pendingOtBucketReset = false;
 
     this.state.players.home = {
       ...this.createPlayer('Home Team'),
@@ -279,6 +313,7 @@ export class GameEngine {
     if (!offenseSelection || !defenseSelection) {
       this.state.pendingMove = {};
       this.state.lastPlay = undefined;
+      this.syncState();
       return;
     }
 
@@ -318,7 +353,7 @@ export class GameEngine {
 
     if (this.isShootoutOvertime()) {
       if (outcome.yards > 0) {
-        this.state.players[offenseSide].score += 2;
+        this.state.players[offenseSide].score += TWO_POINT_POINTS;
         shootoutConverted = true;
       }
     } else {
@@ -326,9 +361,12 @@ export class GameEngine {
       isTurnover = this.applyDownAndDistance(offenseSide, outcome, ballResolution.touchdown, ballResolution.safety);
     }
 
+    const startsConversionFlow = ballResolution.touchdown && this.shouldStartConversionFlow();
+
     const combinedFlags: MatchupFlags = {
       ...(outcome.flags ?? {}),
       ...(ballResolution.flags ?? {}),
+      otBucketReset: this.consumeOtBucketResetFlag(),
     };
 
     const zeroSecondPlay = !outcome.noClockTick && !this.state.field.isOvertime
@@ -357,11 +395,15 @@ export class GameEngine {
         returnYards: combinedFlags.returnYards,
         kickResultSpot: combinedFlags.kickResultSpot,
         icedKicker: combinedFlags.icedKicker,
+        conversionType: combinedFlags.conversionType,
+        conversionSuccess: combinedFlags.conversionSuccess,
+        mandatoryTwoPoint: combinedFlags.mandatoryTwoPoint,
+        otBucketReset: combinedFlags.otBucketReset,
       },
     };
 
     const possessionEnded = this.isShootoutOvertime()
-      || ballResolution.touchdown
+      || (ballResolution.touchdown && !startsConversionFlow)
       || ballResolution.safety
       || isTurnover
       || !!outcome.fieldGoalAttempt;
@@ -372,12 +414,242 @@ export class GameEngine {
 
     offenseHand.refill(this.getDeckForSide(offenseSide));
     defenseHand.refill(this.getDeckForSide(defenseSide));
+    this.state.pendingMove = {};
+
+    if (this.state.phase === GamePhase.GAME_OVER) {
+      this.syncState();
+      return;
+    }
+
+    if (startsConversionFlow) {
+      this.startConversionFlow(offenseSide);
+      this.syncState();
+      return;
+    }
+
+    this.state.phase = GamePhase.RESOLUTION;
     this.syncState();
+  }
+
+  private submitConversionAttemptChoice(side: TeamSide, cardId: string): SubmitMoveResult {
+    const conversion = this.state.conversion;
+    if (!conversion || side !== conversion.offenseSide) {
+      return { accepted: false, resolved: false, reason: 'conversion_offense_only' };
+    }
+
+    const specialType = this.parseSpecialTypeFromCardId(side, cardId);
+    if (!specialType || (specialType !== 'XP' && specialType !== '2PT')) {
+      return { accepted: false, resolved: false, reason: 'conversion_choice_required' };
+    }
+
+    if (!this.canUseSpecial(side, specialType, true)) {
+      return { accepted: false, resolved: false, reason: 'special_not_available' };
+    }
+
+    conversion.attemptType = specialType;
+    this.state.pendingMove = {};
+
+    if (specialType === 'XP') {
+      this.resolveExtraPointConversion();
+      return { accepted: true, resolved: true };
+    }
+
+    this.state.phase = GamePhase.CONVERSION_DEFENSE_SELECT;
+    this.syncState();
+    return { accepted: true, resolved: false };
+  }
+
+  private submitConversionPlay(side: TeamSide, cardId: string): SubmitMoveResult {
+    const conversion = this.state.conversion;
+    if (!conversion || conversion.attemptType !== '2PT') {
+      return { accepted: false, resolved: false, reason: 'conversion_not_active' };
+    }
+
+    const offenseSide = conversion.offenseSide;
+    const isOffense = side === offenseSide;
+    const slot = isOffense ? 'offenseCardId' : 'defenseCardId';
+
+    if (this.state.pendingMove[slot]) {
+      return { accepted: false, resolved: false, reason: 'already_submitted' };
+    }
+
+    const handCard = this.state.players[side].hand.find((card) => card.id === cardId);
+    if (!handCard) {
+      return { accepted: false, resolved: false, reason: 'card_not_in_hand' };
+    }
+
+    if (!isStandardPlay(handCard.type)) {
+      return { accepted: false, resolved: false, reason: 'conversion_standard_only' };
+    }
+
+    this.state.pendingMove[slot] = cardId;
+    if (!this.state.pendingMove.offenseCardId || !this.state.pendingMove.defenseCardId) {
+      return { accepted: true, resolved: false };
+    }
+
+    this.resolveTwoPointConversion();
+    return { accepted: true, resolved: true };
+  }
+
+  private resolveExtraPointConversion() {
+    const conversion = this.state.conversion;
+    if (!conversion || conversion.attemptType !== 'XP') {
+      return;
+    }
+
+    const xpSeed = `${this.createTurnSeed('XP', 'XP')}|xp`;
+    const roll = hashToIndex(`${xpSeed}|roll`, 1000) / 1000;
+    const success = roll < RULE_ASSUMPTIONS.conversion.xpSuccessRate;
+
+    if (success) {
+      this.state.players[conversion.offenseSide].score += EXTRA_POINT_POINTS;
+    }
+
+    this.state.lastPlay = {
+      playCalled: {
+        id: this.buildSpecialCardId(conversion.offenseSide, 'XP'),
+        type: 'XP',
+        name: 'Extra Point',
+        isSpecial: true,
+      },
+      defenseCalled: {
+        id: this.buildSpecialCardId(this.getOpponentSide(conversion.offenseSide), 'XP'),
+        type: 'XP',
+        name: 'Extra Point Defense',
+        isSpecial: true,
+      },
+      delta: success ? 1 : -1,
+      yardsGained: 0,
+      isTouchdown: false,
+      isTurnover: false,
+      isSafety: false,
+      multiplierCard: 'XP',
+      yardCard: 0,
+      message: success ? 'Extra point is good.' : 'Extra point is no good.',
+      flags: {
+        conversionType: 'XP',
+        conversionSuccess: success,
+        mandatoryTwoPoint: conversion.mandatoryTwoPoint,
+        otBucketReset: this.consumeOtBucketResetFlag(),
+      },
+    };
 
     this.state.pendingMove = {};
-    if (this.state.phase !== GamePhase.GAME_OVER) {
-      this.state.phase = GamePhase.RESOLUTION;
+    this.state.phase = GamePhase.CONVERSION_RESOLUTION;
+    this.syncState();
+  }
+
+  private resolveTwoPointConversion() {
+    const conversion = this.state.conversion;
+    if (!conversion || conversion.attemptType !== '2PT') {
+      return;
     }
+
+    const offenseSide = conversion.offenseSide;
+    const defenseSide = this.getOpponentSide(offenseSide);
+    const offenseHand = this.getHandForSide(offenseSide);
+    const defenseHand = this.getHandForSide(defenseSide);
+
+    const offenseCard = offenseHand.playCard(this.state.pendingMove.offenseCardId!);
+    const defenseCard = defenseHand.playCard(this.state.pendingMove.defenseCardId!);
+    if (!offenseCard || !defenseCard || !isStandardPlay(offenseCard.type) || !isStandardPlay(defenseCard.type)) {
+      this.state.pendingMove = {};
+      this.state.lastPlay = undefined;
+      this.state.phase = GamePhase.CONVERSION_OFFENSE_SELECT;
+      this.syncState();
+      return;
+    }
+
+    const outcome = this.resolveStandardPlay(
+      offenseCard.type,
+      defenseCard.type,
+      `${this.createTurnSeed(offenseCard.type, defenseCard.type)}|2pt`,
+      offenseSide,
+      defenseSide
+    );
+
+    if (outcome.keepOffenseCard) {
+      offenseHand.returnCardToHand(offenseCard);
+    }
+    if (outcome.keepDefenseCard) {
+      defenseHand.returnCardToHand(defenseCard);
+    }
+
+    const success = !outcome.forceTurnover && outcome.yards >= RULE_ASSUMPTIONS.conversion.twoPointRequiredYards;
+    if (success) {
+      this.state.players[offenseSide].score += TWO_POINT_POINTS;
+    }
+
+    this.state.lastPlay = {
+      playCalled: offenseCard,
+      defenseCalled: defenseCard,
+      delta: outcome.delta,
+      yardsGained: outcome.yards,
+      isTouchdown: false,
+      isTurnover: false,
+      isSafety: false,
+      multiplierCard: outcome.multiplierCard ?? '2PT',
+      yardCard: outcome.yardCard ?? Math.abs(outcome.yards),
+      message: success
+        ? `Two-point attempt good. ${outcome.message}`
+        : `Two-point attempt failed. ${outcome.message}`,
+      flags: {
+        conversionType: '2PT',
+        conversionSuccess: success,
+        mandatoryTwoPoint: conversion.mandatoryTwoPoint,
+        otBucketReset: this.consumeOtBucketResetFlag(),
+      },
+    };
+
+    offenseHand.refill(this.getDeckForSide(offenseSide));
+    defenseHand.refill(this.getDeckForSide(defenseSide));
+    this.state.pendingMove = {};
+    this.state.phase = GamePhase.CONVERSION_RESOLUTION;
+    this.syncState();
+  }
+
+  private shouldStartConversionFlow(): boolean {
+    const period = this.state.field.overtimePeriod ?? 0;
+    return !this.state.field.isOvertime || period < RULE_ASSUMPTIONS.overtime.shootoutStartPeriod;
+  }
+
+  private startConversionFlow(offenseSide: TeamSide) {
+    const period = this.state.field.overtimePeriod ?? 0;
+    const mandatoryTwoPoint = this.state.field.isOvertime
+      && period >= RULE_ASSUMPTIONS.overtime.mandatoryTwoPointStartPeriod
+      && period < RULE_ASSUMPTIONS.overtime.shootoutStartPeriod;
+
+    this.state.conversion = {
+      offenseSide,
+      attemptType: null,
+      mandatoryTwoPoint,
+    };
+    this.state.pendingMove = {};
+    this.state.phase = GamePhase.CONVERSION_OFFENSE_SELECT;
+  }
+
+  private finishConversionSequence() {
+    const conversion = this.state.conversion;
+    if (!conversion) {
+      this.state.phase = this.getSelectionPhase();
+      return;
+    }
+
+    if (this.state.field.isOvertime) {
+      this.finishOvertimePossession(conversion.offenseSide);
+      this.state.conversion = null;
+      return;
+    }
+
+    this.applyKickoff(this.getOpponentSide(conversion.offenseSide), 'touchdown', this.createKickSeed('touchdown'));
+    this.state.conversion = null;
+
+    if (this.state.field.quarter >= 4 && this.state.field.clockSeconds <= 0 && !this.state.field.awaitingZeroSecondPlay) {
+      this.state.phase = GamePhase.GAME_OVER;
+      return;
+    }
+
+    this.state.phase = this.getSelectionPhase();
   }
 
   private buildSpecialCardId(side: TeamSide, type: PlayType): string {
@@ -399,6 +671,27 @@ export class GameEngine {
 
   private canUseSpecial(side: TeamSide, type: PlayType, isOffense: boolean): boolean {
     if (!SPECIAL_PLAYS.includes(type)) {
+      return false;
+    }
+
+    if (this.state.phase === GamePhase.CONVERSION_OFFENSE_SELECT || this.state.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      const conversion = this.state.conversion;
+      if (!conversion || side !== conversion.offenseSide || !isOffense) {
+        return false;
+      }
+      if (this.state.phase !== GamePhase.CONVERSION_OFFENSE_SELECT) {
+        return false;
+      }
+      if (type === 'XP') {
+        return !conversion.mandatoryTwoPoint;
+      }
+      if (type === '2PT') {
+        return true;
+      }
+      return false;
+    }
+
+    if (type === 'XP' || type === '2PT') {
       return false;
     }
 
@@ -463,6 +756,14 @@ export class GameEngine {
   }
 
   private getSpecialActionsForSide(side: TeamSide): SpecialActionState[] {
+    if (this.state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      return this.getConversionChoiceActions(side);
+    }
+
+    if (this.state.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      return [];
+    }
+
     const isOffense = side === this.getOffenseSide();
     const down = this.state.field.down;
     const timeouts = this.state.players[side].timeouts;
@@ -471,7 +772,7 @@ export class GameEngine {
 
     const actions: SpecialActionState[] = [];
 
-    for (const type of SPECIAL_PLAYS) {
+    for (const type of BASE_SPECIAL_PLAYS) {
       const remaining = type === 'TP'
         ? trickRemaining
         : type === 'HM'
@@ -505,6 +806,39 @@ export class GameEngine {
         type,
         enabled,
         remaining,
+        reason,
+      });
+    }
+
+    return actions;
+  }
+
+  private getConversionChoiceActions(side: TeamSide): SpecialActionState[] {
+    const conversion = this.state.conversion;
+    if (!conversion) {
+      return [];
+    }
+
+    const isOffense = side === conversion.offenseSide;
+    const actions: SpecialActionState[] = [];
+    for (const type of CONVERSION_SPECIAL_PLAYS) {
+      const enabled = this.canUseSpecial(side, type, isOffense);
+      let reason: string | undefined;
+      if (!enabled) {
+        if (!isOffense) {
+          reason = 'offense_only';
+        } else if (type === 'XP' && conversion.mandatoryTwoPoint) {
+          reason = 'mandatory_two_point';
+        } else {
+          reason = 'unavailable';
+        }
+      }
+
+      actions.push({
+        id: this.buildSpecialCardId(side, type),
+        type,
+        enabled,
+        remaining: null,
         reason,
       });
     }
@@ -1133,13 +1467,7 @@ export class GameEngine {
 
     if (nextForwardBall >= 100) {
       this.state.players[offenseSide].score += GAME_CONFIG.TOUCHDOWN_POINTS;
-      const kickoffFlags = !this.state.field.isOvertime
-        ? this.applyKickoff(this.getOpponentSide(offenseSide), 'touchdown', this.createKickSeed('touchdown'))
-        : undefined;
-      if (!this.state.field.isOvertime) {
-        // kickoff placement handled by applyKickoff in regulation.
-      }
-      return { touchdown: true, safety: false, flags: kickoffFlags };
+      return { touchdown: true, safety: false };
     }
 
     if (nextForwardBall < 0) {
@@ -1245,9 +1573,16 @@ export class GameEngine {
     this.state.field.quarter = 4 + period;
     this.state.field.clockSeconds = 0;
     this.state.field.awaitingZeroSecondPlay = false;
+    this.state.conversion = null;
+    this.state.pendingMove = {};
 
-    this.state.players.home.hailMaryCount += 1;
-    this.state.players.away.hailMaryCount += 1;
+    if (this.shouldRefreshOvertimeResources(period)) {
+      this.state.players.home.hailMaryCount = RULE_ASSUMPTIONS.overtime.hailMaryPerBucket;
+      this.state.players.away.hailMaryCount = RULE_ASSUMPTIONS.overtime.hailMaryPerBucket;
+      this.state.players.home.timeouts = RULE_ASSUMPTIONS.overtime.timeoutsPerBucket;
+      this.state.players.away.timeouts = RULE_ASSUMPTIONS.overtime.timeoutsPerBucket;
+      this.pendingOtBucketReset = true;
+    }
 
     this.overtimePossessionsCompleted = 0;
     const firstOffense = period % 2 === 1 ? this.overtimeCoinWinner : this.getOpponentSide(this.overtimeCoinWinner);
@@ -1256,7 +1591,7 @@ export class GameEngine {
 
   private prepareOvertimePossession(offenseSide: TeamSide) {
     const period = this.state.field.overtimePeriod ?? 1;
-    const isShootout = period >= 5;
+    const isShootout = period >= RULE_ASSUMPTIONS.overtime.shootoutStartPeriod;
     const startSpot = isShootout ? COLLEGE_OVERTIME_CONFIG.shootoutSpot : COLLEGE_OVERTIME_CONFIG.startSpot;
 
     this.state.field.possessionPlayerId = offenseSide;
@@ -1282,7 +1617,22 @@ export class GameEngine {
   }
 
   private isShootoutOvertime() {
-    return this.state.field.isOvertime && (this.state.field.overtimePeriod ?? 0) >= 5;
+    return this.state.field.isOvertime && (this.state.field.overtimePeriod ?? 0) >= RULE_ASSUMPTIONS.overtime.shootoutStartPeriod;
+  }
+
+  private shouldRefreshOvertimeResources(period: number): boolean {
+    if (period <= 0) {
+      return false;
+    }
+    return (period - 1) % RULE_ASSUMPTIONS.overtime.bucketPeriodSize === 0;
+  }
+
+  private consumeOtBucketResetFlag(): boolean {
+    if (!this.pendingOtBucketReset) {
+      return false;
+    }
+    this.pendingOtBucketReset = false;
+    return true;
   }
 
   private flipPossession() {

@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 
-import { ClientGameState, GamePhase, JoinGameAck, JoinGamePayload } from '../../shared/types';
+import { ClientGameState, GamePhase, JoinGameAck, JoinGamePayload, PlayType } from '../../shared/types';
 import { GameEngine, TeamSide } from './engine';
 
 export const REJOIN_TTL_MS = 10 * 60 * 1000;
@@ -35,13 +35,25 @@ function getSanitizedState(game: GameEngine, playerId: string): ClientGameState 
   const myState = isHome ? state.players.home : state.players.away;
   const oppState = isHome ? state.players.away : state.players.home;
   const isHomeOffense = state.field.possessionPlayerId === 'home';
-  const myPendingMove = isHome
-    ? (isHomeOffense ? state.pendingMove.offenseCardId : state.pendingMove.defenseCardId)
-    : (isHomeOffense ? state.pendingMove.defenseCardId : state.pendingMove.offenseCardId);
+  const mySide: TeamSide = isHome ? 'home' : 'away';
+
+  let myPendingMove: string | undefined;
+  if (state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    if (state.conversion?.offenseSide === mySide) {
+      myPendingMove = state.pendingMove.offenseCardId;
+    } else {
+      myPendingMove = 'conversion_waiting';
+    }
+  } else {
+    myPendingMove = isHome
+      ? (isHomeOffense ? state.pendingMove.offenseCardId : state.pendingMove.defenseCardId)
+      : (isHomeOffense ? state.pendingMove.defenseCardId : state.pendingMove.offenseCardId);
+  }
 
   return {
     phase: state.phase,
     field: state.field,
+    conversion: state.conversion,
     lastPlay: state.lastPlay,
     myState,
     opponentState: {
@@ -112,7 +124,10 @@ function getOffenseSide(game: GameEngine): TeamSide {
 }
 
 function isSelectablePhase(phase: GamePhase): boolean {
-  return phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT;
+  return phase === GamePhase.OFFENSE_SELECT
+    || phase === GamePhase.DEFENSE_SELECT
+    || phase === GamePhase.CONVERSION_OFFENSE_SELECT
+    || phase === GamePhase.CONVERSION_DEFENSE_SELECT;
 }
 
 function chooseBotCard(room: RoomContext): string | null {
@@ -125,9 +140,22 @@ function chooseBotCard(room: RoomContext): string | null {
   const offenseSide = getOffenseSide(room.game);
   const isOffense = room.botSeat === offenseSide;
 
-  const specialId = (type: 'TP' | 'HM' | 'FG' | 'PT' | 'TO') => {
+  const specialId = (type: PlayType) => {
     return player.specialActions.find((action) => action.type === type && action.enabled)?.id ?? null;
   };
+
+  if (room.game.state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    if (!isOffense) {
+      return null;
+    }
+    const mandatoryTwoPoint = room.game.state.conversion?.mandatoryTwoPoint ?? false;
+    const xp = specialId('XP');
+    const twoPoint = specialId('2PT');
+    if (mandatoryTwoPoint) {
+      return twoPoint ?? xp;
+    }
+    return xp ?? twoPoint;
+  }
 
   if (room.botDifficulty === 'easy') {
     return hand[0]?.id ?? specialId('TP') ?? specialId('TO');
@@ -353,7 +381,7 @@ export function createGameServer() {
         return;
       }
 
-      if (room.game.state.phase !== GamePhase.OFFENSE_SELECT && room.game.state.phase !== GamePhase.DEFENSE_SELECT) {
+      if (!isSelectablePhase(room.game.state.phase)) {
         return;
       }
 

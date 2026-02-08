@@ -25,6 +25,19 @@ export interface RuleAssumptions {
     readonly icingPenalty: number;
     readonly missSpotRule: 'line_of_scrimmage' | 'spot_of_kick';
   };
+  readonly conversion: {
+    readonly xpSuccessRate: number;
+    readonly twoPointMode: 'INTERACTIVE_PLAY_CALL';
+    readonly twoPointRequiredYards: number;
+  };
+  readonly overtime: {
+    readonly refreshPolicy: 'TWO_PERIOD_BUCKET';
+    readonly bucketPeriodSize: number;
+    readonly hailMaryPerBucket: number;
+    readonly timeoutsPerBucket: number;
+    readonly mandatoryTwoPointStartPeriod: number;
+    readonly shootoutStartPeriod: number;
+  };
 }
 
 const FIELD_GOAL_DISTANCE_BANDS: readonly DistanceBand[] = Object.freeze([
@@ -35,7 +48,7 @@ const FIELD_GOAL_DISTANCE_BANDS: readonly DistanceBand[] = Object.freeze([
 ]);
 
 export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
-  version: '2026-02-08-kick-open-rules-v1',
+  version: '2026-02-08-conversion-ot-bucket-v1',
   kickoff: Object.freeze({
     touchbackRate: 0.34,
     touchbackSpot: 25,
@@ -55,5 +68,18 @@ export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
     longShotSuccessRate: 0.08,
     icingPenalty: 0.12,
     missSpotRule: 'line_of_scrimmage',
+  }),
+  conversion: Object.freeze({
+    xpSuccessRate: 0.93,
+    twoPointMode: 'INTERACTIVE_PLAY_CALL',
+    twoPointRequiredYards: 2,
+  }),
+  overtime: Object.freeze({
+    refreshPolicy: 'TWO_PERIOD_BUCKET',
+    bucketPeriodSize: 2,
+    hailMaryPerBucket: 2,
+    timeoutsPerBucket: 1,
+    mandatoryTwoPointStartPeriod: 3,
+    shootoutStartPeriod: 5,
   }),
 });
