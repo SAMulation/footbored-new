@@ -157,8 +157,7 @@ export class GameEngine {
       pendingMove: {},
     };
 
-    this.handHome.refill(this.deckHome);
-    this.handAway.refill(this.deckAway);
+    this.dealInitialHands();
     this.syncState();
   }
 
@@ -206,6 +205,40 @@ export class GameEngine {
     }
 
     this.state.phase = this.getSelectionPhase();
+  }
+
+  public resetForRematch(): void {
+    const homeId = this.state.players.home.id;
+    const awayId = this.state.players.away.id;
+
+    this.deckHome = new Deck();
+    this.deckAway = new Deck();
+    this.handHome = new Hand();
+    this.handAway = new Hand();
+
+    this.state.field = {
+      possessionPlayerId: 'home',
+      ballOn: 20,
+      down: 1,
+      toGo: 10,
+      quarter: 1,
+      clockSeconds: QUARTER_SECONDS,
+    };
+    this.state.pendingMove = {};
+    this.state.lastPlay = undefined;
+    this.state.phase = GamePhase.LOBBY;
+
+    this.state.players.home = {
+      ...this.createPlayer('Home Team'),
+      id: homeId,
+    };
+    this.state.players.away = {
+      ...this.createPlayer('Away Team'),
+      id: awayId,
+    };
+
+    this.dealInitialHands();
+    this.startGame();
   }
 
   private resolveTurn(): void {
@@ -452,6 +485,11 @@ export class GameEngine {
     this.state.players.away.hand = this.handAway.toState().cards;
     this.state.players.home.deckCount = this.deckHome.count();
     this.state.players.away.deckCount = this.deckAway.count();
+  }
+
+  private dealInitialHands() {
+    this.handHome.refill(this.deckHome);
+    this.handAway.refill(this.deckAway);
   }
 
   private createPlayer(name: string): PlayerState {

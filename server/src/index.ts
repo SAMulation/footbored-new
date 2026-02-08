@@ -118,6 +118,25 @@ export function createGameServer() {
       io.to(awayId).emit('GAME_STATE_UPDATE', getSanitizedState(game, awayId));
     });
 
+    socket.on('RESET_GAME', ({ roomId }) => {
+      const game = games.get(roomId);
+      if (!game) {
+        return;
+      }
+
+      const isParticipant = game.state.players.home.id === socket.id || game.state.players.away.id === socket.id;
+      if (!isParticipant) {
+        return;
+      }
+
+      game.resetForRematch();
+
+      const homeId = game.state.players.home.id;
+      const awayId = game.state.players.away.id;
+      io.to(homeId).emit('GAME_STATE_UPDATE', getSanitizedState(game, homeId));
+      io.to(awayId).emit('GAME_STATE_UPDATE', getSanitizedState(game, awayId));
+    });
+
     socket.on('disconnect', () => {
       console.log('Player disconnected:', socket.id);
     });

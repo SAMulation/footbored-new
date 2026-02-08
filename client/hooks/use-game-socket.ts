@@ -67,10 +67,18 @@ export const useGameSocket = () => {
     }
   };
 
+  const playAgain = () => {
+    if (socketRef.current && roomId) {
+      socketRef.current.emit('RESET_GAME', { roomId });
+    }
+  };
+
   return {
     gameState,
     isConnected,
+    roomId,
     joinGame,
-    playCard
+    playCard,
+    playAgain
   };
 };

@@ -2,9 +2,9 @@
 
 ## Current State (Feb 8, 2026)
 - Server/client/shared monorepo is buildable and lintable.
-- Real-time socket game loop works with basic room join and card submission.
-- Core rule logic is still prototype-level and needs deterministic validation.
-- Mobile UI is functional but still placeholder-heavy for field/HUD experience.
+- Real-time socket game loop works with authoritative engine-side move submission.
+- Core rules are deterministic and backed by tests plus socket regression checks.
+- Mobile UI now includes live field, HUD, room join/create flow, special-action controls, and a game-over replay overlay.
 
 ## Guiding Strategy: Logic First, UX in Parallel
 - Primary gate before deeper UX: deterministic, test-covered game logic that is playable outside the app.
@@ -12,7 +12,7 @@
 - Keep socket integration validated continuously with a regression harness.
 - Continue UX milestones once logic invariants are stable and measurable.
 
-## Milestone A: Terminal-Playable Core (Now)
+## Milestone A: Terminal-Playable Core (Complete)
 - Deliverables:
   - `server/src/cli/play-terminal.ts` human-vs-bot terminal mode.
   - Authoritative engine move API (`submitMove`, `advanceAfterResolution`).
@@ -25,12 +25,14 @@
   - `npm --prefix /Users/sam/Downloads/Projects/footbored-new/server run sim:socket` passes.
   - `npm --prefix /Users/sam/Downloads/Projects/footbored-new/server run cli:play` runs a full game loop without crash.
 
-## Milestone B: Mobile Gameplay UX (Hour 6-8)
+## Milestone B: Mobile Gameplay UX (Hour 6-8) (In Progress)
 - Deliverables:
-  - Field position visualization with animated ball marker.
-  - First-down line and down-distance rendering.
-  - Scoreboard and turn indicators.
-  - Basic special-actions controls (punt/field goal/timeout) in UI.
+  - [x] Field position visualization with animated ball marker.
+  - [x] First-down line and down-distance rendering.
+  - [x] Scoreboard and turn indicators.
+  - [x] Basic special-actions controls (punt/field goal/timeout) in UI.
+  - [x] Game-over overlay with replay flow.
+  - [x] Room input + create/join flow (no hardcoded room-only path).
 - Exit criteria:
   - Mobile app renders live field state updates from server.
   - Visual updates remain in sync across two connected players.
@@ -67,8 +69,6 @@
   - Room lifecycle and reconnect workflows validated by scripted checks.
 
 ## Immediate Next Commit Checklist
-- Add authoritative move submission API in engine.
-- Implement deterministic play-resolution matrix and bidirectional field movement.
-- Add quarter/clock game-over progression.
-- Add terminal human-vs-bot CLI mode.
-- Add socket regression harness and test suite scripts.
+- Add reconnect-safe room state restoration and rejoin UX.
+- Add richer game-over details (per-play recap and quick rematch pairing behavior).
+- Expand UI tests around room/join/replay and action-button legality.
