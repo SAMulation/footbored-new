@@ -6,7 +6,7 @@ import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
 import { PlayerHand, SpecialActionItem } from '@/components/game/PlayerHand';
 import { useGameSocket } from '../../hooks/use-game-socket';
-import { ClientGameState, GamePhase, PlayType } from '../../../shared/types';
+import { Card, ClientGameState, GamePhase, PlayType } from '../../../shared/types';
 
 const SPECIAL_ACTION_LABELS: Record<PlayType, string> = {
   SR: 'Short Run',
@@ -199,6 +199,11 @@ interface InGameShellProps {
   isPhone: boolean;
   isCompactDesktop: boolean;
   transientNotice: string | null;
+  showDesktopRail: boolean;
+  hand: Card[];
+  specialActions: SpecialActionItem[];
+  onPlayCard: (cardId: string) => void;
+  railDisabled: boolean;
 }
 
 function InGameShell({
@@ -210,6 +215,11 @@ function InGameShell({
   isPhone,
   isCompactDesktop,
   transientNotice,
+  showDesktopRail,
+  hand,
+  specialActions,
+  onPlayCard,
+  railDisabled,
 }: InGameShellProps) {
   const playContext = resolvePlayContext(gameState, isMyTurn);
 
@@ -226,17 +236,33 @@ function InGameShell({
         </View>
       )}
 
-      <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact]}>
-        <FieldView
-          ballOn={gameState.field.ballOn}
-          toGo={gameState.field.toGo}
-          offenseSide={possession}
-        />
-      </View>
+      <View style={[styles.desktopArena, showDesktopRail && styles.desktopArenaActive]}>
+        <View style={[styles.desktopMainColumn, showDesktopRail && styles.desktopMainColumnActive]}>
+          <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact]}>
+            <FieldView
+              ballOn={gameState.field.ballOn}
+              toGo={gameState.field.toGo}
+              offenseSide={possession}
+            />
+          </View>
 
-      <View style={[styles.playContextPanel, isCompactDesktop && styles.playContextPanelCompact]}>
-        <Text style={styles.playContextTitle}>{playContext.title}</Text>
-        <Text style={[styles.playContextText, isPhone && styles.playContextTextPhone]}>{playContext.message}</Text>
+          <View style={[styles.playContextPanel, isCompactDesktop && styles.playContextPanelCompact]}>
+            <Text style={styles.playContextTitle}>{playContext.title}</Text>
+            <Text style={[styles.playContextText, isPhone && styles.playContextTextPhone]}>{playContext.message}</Text>
+          </View>
+        </View>
+
+        {showDesktopRail && (
+          <View style={styles.desktopRailColumn}>
+            <PlayerHand
+              hand={hand}
+              onPlayCard={onPlayCard}
+              specialActions={specialActions}
+              disabled={railDisabled}
+              mode="sidebar"
+            />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -268,6 +294,7 @@ export default function GameScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const isPhone = viewportWidth < 620;
   const isCompactDesktop = viewportWidth < 1280;
+  const isDesktopRail = viewportWidth >= 1280;
   const isShortSurface = viewportHeight < 760;
 
   const {
@@ -497,6 +524,11 @@ export default function GameScreen() {
                 isPhone={isPhone}
                 isCompactDesktop={isCompactDesktop}
                 transientNotice={gameplayNotice}
+                showDesktopRail={isDesktopRail}
+                hand={displayedHand}
+                specialActions={specialActionItems}
+                onPlayCard={playCard}
+                railDisabled={!isMyTurn || isGameOver || isRejoining}
               />
             )}
           </View>
@@ -531,7 +563,7 @@ export default function GameScreen() {
         </ScrollView>
       </View>
 
-      {gameState && (
+      {gameState && !isDesktopRail && (
         <PlayerHand
           hand={displayedHand}
           onPlayCard={playCard}
@@ -689,7 +721,7 @@ const styles = StyleSheet.create({
   },
   inGameShell: {
     justifyContent: 'flex-start',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 12,
     paddingBottom: 8,
   },
@@ -698,7 +730,7 @@ const styles = StyleSheet.create({
   },
   inGameTopRow: {
     width: '100%',
-    maxWidth: 1100,
+    maxWidth: 1320,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -742,9 +774,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  desktopArena: {
+    width: '100%',
+    maxWidth: 1320,
+  },
+  desktopArenaActive: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  desktopMainColumn: {
+    width: '100%',
+  },
+  desktopMainColumnActive: {
+    flex: 1,
+    minWidth: 0,
+  },
+  desktopRailColumn: {
+    width: 360,
+    minWidth: 320,
+    maxWidth: 380,
+    backgroundColor: '#171b22',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#324153',
+    overflow: 'hidden',
+  },
   fieldFrame: {
     width: '100%',
-    maxWidth: 1120,
+    maxWidth: '100%',
     backgroundColor: 'rgba(12, 43, 18, 0.5)',
     borderRadius: 14,
     borderWidth: 1,
@@ -759,7 +817,7 @@ const styles = StyleSheet.create({
   },
   playContextPanel: {
     width: '100%',
-    maxWidth: 1120,
+    maxWidth: '100%',
     backgroundColor: 'rgba(4, 34, 14, 0.86)',
     borderColor: 'rgba(84, 149, 97, 0.62)',
     borderWidth: 1,

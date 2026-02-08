@@ -98,8 +98,8 @@ export function GameHud({
   awayDeckCount,
 }: GameHudProps) {
   const { width: viewportWidth } = useWindowDimensions();
-  const isPhone = viewportWidth < 680;
-  const isTablet = viewportWidth >= 680 && viewportWidth < 1120;
+  const isPhone = viewportWidth < 760;
+  const isNarrow = viewportWidth < 1120;
 
   const connectionLabel = isRejoining ? 'REJOINING' : isConnected ? 'ONLINE' : 'OFFLINE';
   const prompt = resolvePrompt({ isRejoining, waitingForOpponent, phase, isMyTurn });
@@ -123,24 +123,43 @@ export function GameHud({
         </View>
       </View>
 
-      <View style={[styles.scoreboardRow, (isPhone || isTablet) && styles.scoreboardRowStack]}>
-        <View style={[styles.teamBlock, possession === 'home' && styles.teamBlockPossession]}>
-          <Text style={styles.teamLabel}>HOME</Text>
-          <Text style={styles.teamSub}>TO {homeTimeouts} / DECK {homeDeckCount}</Text>
+      {isPhone ? (
+        <View style={styles.mobileScoreboard}>
+          <View style={[styles.scoreBlock, styles.scoreBlockPhone]}>
+            <Text style={[styles.scoreText, styles.scoreTextPhone]}>
+              {homeScore} - {awayScore}
+            </Text>
+            <Text style={styles.scoreSub}>HOME vs AWAY</Text>
+          </View>
+          <View style={styles.mobileTeamRow}>
+            <View style={[styles.teamBlock, styles.teamBlockMobile, possession === 'home' && styles.teamBlockPossession]}>
+              <Text style={styles.teamLabel}>HOME</Text>
+              <Text style={[styles.teamSub, styles.teamSubMobile]}>TO {homeTimeouts} / DECK {homeDeckCount}</Text>
+            </View>
+            <View style={[styles.teamBlock, styles.teamBlockMobile, possession === 'away' && styles.teamBlockPossession]}>
+              <Text style={styles.teamLabel}>AWAY</Text>
+              <Text style={[styles.teamSub, styles.teamSubMobile]}>TO {awayTimeouts} / DECK {awayDeckCount}</Text>
+            </View>
+          </View>
         </View>
+      ) : (
+        <View style={[styles.scoreboardRow, isNarrow && styles.scoreboardRowNarrow]}>
+          <View style={[styles.teamBlock, possession === 'home' && styles.teamBlockPossession]}>
+            <Text style={styles.teamLabel}>HOME</Text>
+            <Text style={styles.teamSub}>TO {homeTimeouts} / DECK {homeDeckCount}</Text>
+          </View>
 
-        <View style={[styles.scoreBlock, isPhone && styles.scoreBlockPhone]}>
-          <Text style={[styles.scoreText, isPhone && styles.scoreTextPhone]}>
-            {homeScore} - {awayScore}
-          </Text>
-          <Text style={styles.scoreSub}>HOME vs AWAY</Text>
-        </View>
+          <View style={styles.scoreBlock}>
+            <Text style={styles.scoreText}>{homeScore} - {awayScore}</Text>
+            <Text style={styles.scoreSub}>HOME vs AWAY</Text>
+          </View>
 
-        <View style={[styles.teamBlock, possession === 'away' && styles.teamBlockPossession]}>
-          <Text style={styles.teamLabel}>AWAY</Text>
-          <Text style={styles.teamSub}>TO {awayTimeouts} / DECK {awayDeckCount}</Text>
+          <View style={[styles.teamBlock, possession === 'away' && styles.teamBlockPossession]}>
+            <Text style={styles.teamLabel}>AWAY</Text>
+            <Text style={styles.teamSub}>TO {awayTimeouts} / DECK {awayDeckCount}</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       <View style={styles.promptRow}>
         <Text style={styles.promptText}>{prompt}</Text>
@@ -231,8 +250,15 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: 8,
   },
-  scoreboardRowStack: {
-    flexDirection: 'column',
+  scoreboardRowNarrow: {
+    gap: 6,
+  },
+  mobileScoreboard: {
+    gap: 8,
+  },
+  mobileTeamRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   teamBlock: {
     flex: 1,
@@ -260,8 +286,15 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 2,
   },
+  teamBlockMobile: {
+    paddingVertical: 8,
+    minHeight: 64,
+  },
+  teamSubMobile: {
+    fontSize: 12,
+  },
   scoreBlock: {
-    minWidth: 220,
+    minWidth: 240,
     backgroundColor: '#232a34',
     borderColor: '#4a5668',
     borderWidth: 1,
@@ -274,6 +307,7 @@ const styles = StyleSheet.create({
   scoreBlockPhone: {
     minWidth: 0,
     width: '100%',
+    paddingVertical: 10,
   },
   scoreText: {
     color: '#f7fbff',

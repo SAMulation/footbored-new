@@ -14,3 +14,19 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN: Finish Plan: UI/UX Lab Polish and V
   - `UX_ROADMAP.md`
 - Blocker:
   - Playwright CLI install is unavailable in this environment due `ENOTFOUND registry.npmjs.org`, so scripted browser screenshots could not be captured in this run.
+
+- Current request: desktop polish (move play calling to right), mobile polish (button spacing + scoreboard compaction), focus on UI only.
+- In progress:
+  - Updated `GameHud.tsx` for a compact mobile scoreboard pattern (score first, side-by-side HOME/AWAY chips).
+  - Updated `PlayerHand.tsx` to support `mode="sidebar"`, wrapped mobile special-action chips, and compact sidebar card actions.
+  - Updated `index.tsx` to render desktop in-game layout with a right-side play-calling rail and left-side field/context.
+- Playwright polish validation (manual CLI fallback) completed:
+  - Desktop (default viewport) confirms right-side play calling panel is active and field + previous-play context remain fully visible.
+  - Mobile viewport (390x844) confirms special-action chip spacing no longer overlaps and scoreboard is compacted to score-first + side-by-side team chips.
+  - Artifacts saved:
+    - `output/playwright/ui-polish-desktop-right-rail.png`
+    - `output/playwright/ui-polish-mobile-scoreboard-spacing.png`
+- Tooling note:
+  - `develop-web-game` script currently fails in this environment due missing `playwright` package import resolution; continued verification used `playwright` skill CLI wrapper with equivalent snapshot/screenshot loop.
+- Next TODO:
+  - Add a project-local `playwright` dependency or adjust `$WEB_GAME_CLIENT` launcher so `develop-web-game` script runs directly without fallback.

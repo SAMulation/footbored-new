@@ -16,10 +16,31 @@ interface PlayerHandProps {
   specialActions?: SpecialActionItem[];
   disabled?: boolean;
   bottomInset?: number;
+  mode?: 'bottom' | 'sidebar';
 }
 
-export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bottomInset = 0 }: PlayerHandProps) {
+function getMiniCardTone(type: Card['type']) {
+  if (type === 'SR' || type === 'LR') {
+    return { backgroundColor: '#2d8f58', borderColor: '#64d596' };
+  }
+  if (type === 'SP' || type === 'LP') {
+    return { backgroundColor: '#2f73a7', borderColor: '#77b9ea' };
+  }
+  return { backgroundColor: '#7f4f24', borderColor: '#f4d03f' };
+}
+
+export function PlayerHand({
+  hand,
+  onPlayCard,
+  specialActions = [],
+  disabled,
+  bottomInset = 0,
+  mode = 'bottom',
+}: PlayerHandProps) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const isSidebar = mode === 'sidebar';
+  const isPhone = viewportWidth < 620 && !isSidebar;
+
   const railBounds = useMemo(() => {
     let minHeight = 186;
     let maxHeight = 286;
@@ -53,58 +74,114 @@ export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bo
     };
   }, [viewportWidth, viewportHeight]);
 
-  const isPhone = viewportWidth < 520;
+  const sizeStyle = isSidebar
+    ? {
+      flex: 1,
+      minHeight: 0,
+      paddingBottom: 12,
+    }
+    : {
+      minHeight: railBounds.minHeight,
+      maxHeight: railBounds.maxHeight,
+      paddingBottom: Math.max(12, Math.round(bottomInset) + 8),
+    };
+
+  const useWrappedActions = isPhone || isSidebar;
 
   return (
     <View
       style={[
         styles.container,
-        {
-          minHeight: railBounds.minHeight,
-          maxHeight: railBounds.maxHeight,
-          paddingBottom: Math.max(12, Math.round(bottomInset) + 8),
-        },
+        isSidebar && styles.containerSidebar,
+        sizeStyle,
         disabled && styles.containerDisabled,
       ]}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.label, isPhone && styles.labelPhone]}>Play Command Rail</Text>
+      <View style={[styles.headerRow, isSidebar && styles.headerRowSidebar]}>
+        <Text style={[styles.label, isPhone && styles.labelPhone, isSidebar && styles.labelSidebar]}>
+          {isSidebar ? 'Play Calling' : 'Play Command Rail'}
+        </Text>
         <Text style={[styles.subLabel, isPhone && styles.subLabelPhone]}>{disabled ? 'Awaiting turn' : 'Pick your play'}</Text>
       </View>
 
       {specialActions.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.specialActionsRow, isPhone && styles.specialActionsRowPhone]}>
-          {specialActions.map((action) => (
-            <TouchableOpacity
-              key={action.cardId}
-              style={[
-                styles.specialActionButton,
-                isPhone && styles.specialActionButtonPhone,
-                !action.enabled && styles.specialActionButtonUnavailable,
-                (!action.enabled || disabled) && styles.specialActionDisabled,
-              ]}
-              onPress={() => onPlayCard(action.cardId)}
-              disabled={disabled || !action.enabled}>
-              <Text
+        useWrappedActions ? (
+          <View style={[styles.specialActionsWrap, isPhone && styles.specialActionsWrapPhone]}>
+            {specialActions.map((action) => (
+              <TouchableOpacity
+                key={action.cardId}
                 style={[
-                  styles.specialActionText,
-                  isPhone && styles.specialActionTextPhone,
-                  !action.enabled && styles.specialActionTextUnavailable,
+                  styles.specialActionButton,
+                  isPhone && styles.specialActionButtonPhone,
+                  !action.enabled && styles.specialActionButtonUnavailable,
+                  (!action.enabled || disabled) && styles.specialActionDisabled,
                 ]}
-                numberOfLines={1}>
-                {action.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+                onPress={() => onPlayCard(action.cardId)}
+                disabled={disabled || !action.enabled}>
+                <Text
+                  style={[
+                    styles.specialActionText,
+                    isPhone && styles.specialActionTextPhone,
+                    !action.enabled && styles.specialActionTextUnavailable,
+                  ]}
+                  numberOfLines={1}>
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.specialActionsRow}>
+            {specialActions.map((action) => (
+              <TouchableOpacity
+                key={action.cardId}
+                style={[
+                  styles.specialActionButton,
+                  !action.enabled && styles.specialActionButtonUnavailable,
+                  (!action.enabled || disabled) && styles.specialActionDisabled,
+                ]}
+                onPress={() => onPlayCard(action.cardId)}
+                disabled={disabled || !action.enabled}>
+                <Text
+                  style={[
+                    styles.specialActionText,
+                    !action.enabled && styles.specialActionTextUnavailable,
+                  ]}
+                  numberOfLines={1}>
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )
       )}
 
       {hand.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Waiting for next down...</Text>
         </View>
+      ) : isSidebar ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarCardList}>
+          {hand.map((card) => {
+            const tone = getMiniCardTone(card.type);
+            return (
+              <TouchableOpacity
+                key={card.id}
+                style={[
+                  styles.sidebarCardButton,
+                  tone,
+                  disabled && styles.specialActionDisabled,
+                ]}
+                onPress={() => onPlayCard(card.id)}
+                disabled={disabled}>
+                <Text style={styles.sidebarCardType}>{card.type}</Text>
+                <Text style={styles.sidebarCardName} numberOfLines={1}>{card.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       ) : (
         <ScrollView
           horizontal
@@ -133,6 +210,12 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     gap: 10,
   },
+  containerSidebar: {
+    borderTopWidth: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: '#3a4454',
+    paddingTop: 8,
+  },
   containerDisabled: {
     backgroundColor: '#151920',
   },
@@ -143,6 +226,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 10,
   },
+  headerRowSidebar: {
+    alignItems: 'flex-end',
+  },
   label: {
     color: '#d2d6dc',
     fontSize: 12,
@@ -151,6 +237,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   labelPhone: {
+    fontSize: 11,
+  },
+  labelSidebar: {
     fontSize: 11,
   },
   subLabel: {
@@ -165,7 +254,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 8,
   },
-  specialActionsRowPhone: {
+  specialActionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  specialActionsWrapPhone: {
     paddingHorizontal: 12,
     gap: 6,
   },
@@ -179,7 +274,7 @@ const styles = StyleSheet.create({
   },
   specialActionButtonPhone: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
   },
   specialActionButtonUnavailable: {
     backgroundColor: '#3d2f27',
@@ -202,6 +297,36 @@ const styles = StyleSheet.create({
   cardsRow: {
     paddingHorizontal: 16,
     paddingBottom: 6,
+  },
+  sidebarCardList: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  sidebarCardButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sidebarCardType: {
+    color: '#f5fbff',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  sidebarCardName: {
+    color: '#f9feff',
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
   },
   emptyState: {
     flex: 1,
