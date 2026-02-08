@@ -87,3 +87,10 @@ npm --prefix /Users/sam/Downloads/Projects/footbored-new/server run start
 npm --prefix /Users/sam/Downloads/Projects/footbored-new/server run build
 npm --prefix /Users/sam/Downloads/Projects/footbored-new/client run lint
 ```
+
+## Quick Test Helpers
+
+```bash
+./scripts/validate-all.sh
+./scripts/playtest-web.sh
+```
