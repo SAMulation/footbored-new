@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { Card } from '../../../shared/types';
 import { STANDARD_DECK_BLUEPRINTS } from '../../../shared/constants';
 
@@ -13,7 +13,7 @@ export class Deck {
   reset() {
     this.cards = STANDARD_DECK_BLUEPRINTS.map(blueprint => ({
       ...blueprint,
-      id: uuidv4()
+      id: randomUUID()
     }));
     this.shuffle();
     this.discardPile = [];

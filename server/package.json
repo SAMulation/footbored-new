@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/server/src/index.js"
+    "start": "node dist/server/src/index.js",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "cli:play": "tsx src/cli/play-terminal.ts",
+    "sim:socket": "tsx src/simulation/socket-regression.ts"
   },
   "keywords": [],
   "author": "",

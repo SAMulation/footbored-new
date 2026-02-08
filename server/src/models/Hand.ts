@@ -28,6 +28,10 @@ export class Hand {
     return playedCard;
   }
 
+  hasCard(cardId: string): boolean {
+    return this.cards.some((card) => card.id === cardId);
+  }
+
   // Used for Punts/FGs where the opponent doesn't lose a card
   returnCardToHand(card: Card) {
     this.cards.push(card);
