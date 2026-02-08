@@ -139,6 +139,7 @@ export class GameEngine {
   private handHome = new Hand();
   private handAway = new Hand();
 
+  private openingCoinWinner: TeamSide;
   private overtimeCoinWinner: TeamSide;
   private overtimePossessionsCompleted = 0;
   private standardPlaysUsedBySide: Record<TeamSide, number> = {
@@ -152,6 +153,7 @@ export class GameEngine {
   private pendingOtBucketReset = false;
 
   constructor(roomId: string) {
+    this.openingCoinWinner = hashToIndex(`${roomId}|opening-coin`, 2) === 0 ? 'home' : 'away';
     this.overtimeCoinWinner = hashToIndex(`${roomId}|ot-coin`, 2) === 0 ? 'home' : 'away';
 
     this.state = {
@@ -181,6 +183,7 @@ export class GameEngine {
   }
 
   public startGame() {
+    this.runOpeningCoinTossAndKickoff();
     this.state.phase = this.getSelectionPhase();
     this.syncState();
   }
@@ -652,7 +655,9 @@ export class GameEngine {
       return;
     }
 
-    this.applyKickoff(this.getOpponentSide(conversion.offenseSide), 'touchdown', this.createKickSeed('touchdown'));
+    const receivingSide = this.getOpponentSide(conversion.offenseSide);
+    const kickoffFlags = this.applyKickoff(receivingSide, 'touchdown', this.createKickSeed('touchdown'));
+    this.mergeKickoffIntoLastPlay(receivingSide, kickoffFlags);
     this.state.conversion = null;
 
     if (this.state.field.quarter >= 4 && this.state.field.clockSeconds <= 0 && !this.state.field.awaitingZeroSecondPlay) {
@@ -661,6 +666,70 @@ export class GameEngine {
     }
 
     this.state.phase = this.getSelectionPhase();
+  }
+
+  private runOpeningCoinTossAndKickoff() {
+    const receivingSide = this.openingCoinWinner;
+    const kickingSide = this.getOpponentSide(receivingSide);
+    const kickoffFlags = this.applyKickoff(receivingSide, 'touchdown', `${this.createKickSeed('touchdown')}|opening`);
+    const kickoffSummary = this.describeKickoffOutcome(receivingSide, kickoffFlags);
+
+    this.state.lastPlay = {
+      playCalled: {
+        id: `SYSTEM:COIN_TOSS:${receivingSide}`,
+        type: 'TO',
+        name: 'Coin Toss',
+        isSpecial: true,
+      },
+      defenseCalled: {
+        id: `SYSTEM:OPENING_KICKOFF:${kickingSide}`,
+        type: 'TO',
+        name: 'Opening Kickoff',
+        isSpecial: true,
+      },
+      delta: 0,
+      yardsGained: 0,
+      isTouchdown: false,
+      isTurnover: false,
+      isSafety: false,
+      multiplierCard: 'N/A',
+      yardCard: 0,
+      message: `Coin toss: ${receivingSide.toUpperCase()} receives, ${kickingSide.toUpperCase()} kicks. ${kickoffSummary}`,
+      flags: {
+        kickType: kickoffFlags.kickType,
+        kickDistance: kickoffFlags.kickDistance,
+        returnYards: kickoffFlags.returnYards,
+        kickoffTouchback: kickoffFlags.kickoffTouchback,
+        kickResultSpot: kickoffFlags.kickResultSpot,
+      },
+    };
+  }
+
+  private describeKickoffOutcome(receivingSide: TeamSide, kickoffFlags: MatchupFlags): string {
+    const absoluteSpot = kickoffFlags.kickResultSpot ?? this.state.field.ballOn;
+    const receivingForwardSpot = this.toForwardBall(absoluteSpot, receivingSide);
+    if (kickoffFlags.kickoffTouchback) {
+      return `Kickoff touchback: ${receivingSide.toUpperCase()} starts at ${receivingForwardSpot}.`;
+    }
+
+    if ((kickoffFlags.returnYards ?? 0) > 0) {
+      return `Kickoff returned to ${receivingForwardSpot} (${kickoffFlags.returnYards}y return).`;
+    }
+
+    return `Kickoff placed at ${receivingForwardSpot}.`;
+  }
+
+  private mergeKickoffIntoLastPlay(receivingSide: TeamSide, kickoffFlags: MatchupFlags) {
+    if (!this.state.lastPlay) {
+      return;
+    }
+
+    this.state.lastPlay.flags = {
+      ...(this.state.lastPlay.flags ?? {}),
+      ...kickoffFlags,
+    };
+    const kickoffSummary = this.describeKickoffOutcome(receivingSide, kickoffFlags);
+    this.state.lastPlay.message = `${this.state.lastPlay.message} ${kickoffSummary}`.trim();
   }
 
   private buildSpecialCardId(side: TeamSide, type: PlayType): string {

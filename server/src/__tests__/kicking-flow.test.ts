@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { GamePhase } from '../../../shared/types';
 import { GameEngine } from '../engine';
+import { RULE_ASSUMPTIONS } from '../rules/assumptions';
 
 function playTurn(engine: GameEngine, offenseCardId: string, defenseCardId: string) {
   const first = engine.submitMove('home', offenseCardId);
@@ -14,6 +16,23 @@ function playTurn(engine: GameEngine, offenseCardId: string, defenseCardId: stri
 
   return engine.state.lastPlay;
 }
+
+test('startGame performs opening coin toss kickoff and surfaces kickoff metadata', () => {
+  const engine = new GameEngine('OPENING-KICKOFF');
+  engine.startGame();
+
+  const offense = engine.state.field.possessionPlayerId === 'away' ? 'away' : 'home';
+  const forwardSpot = offense === 'home' ? engine.state.field.ballOn : 100 - engine.state.field.ballOn;
+  const minStart = Math.min(RULE_ASSUMPTIONS.kickoff.touchbackSpot, RULE_ASSUMPTIONS.kickoff.returnSpotMin);
+  const maxStart = Math.max(RULE_ASSUMPTIONS.kickoff.touchbackSpot, RULE_ASSUMPTIONS.kickoff.returnSpotMax);
+
+  assert.equal(engine.state.phase, GamePhase.OFFENSE_SELECT);
+  assert.equal(engine.state.field.down, 1);
+  assert.equal(engine.state.field.toGo, 10);
+  assert.equal(forwardSpot >= minStart && forwardSpot <= maxStart, true);
+  assert.equal(engine.state.lastPlay?.flags?.kickType, 'KICKOFF');
+  assert.match(engine.state.lastPlay?.message ?? '', /coin toss/i);
+});
 
 test('legal 4th-down punt uses deterministic punt metadata and flips possession', () => {
   const engine = new GameEngine('PUNT-FLOW-1');

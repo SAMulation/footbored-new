@@ -5,6 +5,7 @@ import { Card } from '../../../shared/types';
 import { GameEngine, roundYardsForPlay } from '../engine';
 
 function stageTurn(engine: GameEngine, offense: Card, defense: Card) {
+  engine.state.field.possessionPlayerId = 'home';
   (engine as any).handHome.returnCardToHand(offense);
   (engine as any).handAway.returnCardToHand(defense);
   (engine as any).syncState();

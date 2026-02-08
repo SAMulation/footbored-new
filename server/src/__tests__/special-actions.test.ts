@@ -24,6 +24,8 @@ test('virtual special actions are exposed with stable ids', () => {
 test('offense can play virtual TP and consume charge', () => {
   const engine = new GameEngine('SPECIAL-TP-USE');
   engine.startGame();
+  engine.state.field.possessionPlayerId = 'home';
+  (engine as any).syncState();
 
   const tp = getAction(engine, 'home', 'TP');
   assert(tp && tp.enabled);
@@ -48,6 +50,7 @@ test('offense can play virtual TP and consume charge', () => {
 test('offense cannot play virtual HM when exhausted', () => {
   const engine = new GameEngine('SPECIAL-HM-EXHAUSTED');
   engine.startGame();
+  engine.state.field.possessionPlayerId = 'home';
 
   engine.state.players.home.hailMaryCount = 0;
   (engine as any).syncState();

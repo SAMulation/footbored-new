@@ -74,6 +74,8 @@ test('XP conversion resolves immediately and transitions to kickoff after conver
   assert.equal(engine.state.phase, GamePhase.OFFENSE_SELECT);
   assert.equal(engine.state.conversion, null);
   assert.equal(engine.state.field.possessionPlayerId, 'away');
+  assert.equal(engine.state.lastPlay?.flags?.kickType, 'KICKOFF');
+  assert.match(engine.state.lastPlay?.message ?? '', /kickoff/i);
 });
 
 test('2PT conversion requires offense/defense play submission and resolves deterministically', () => {
@@ -104,6 +106,8 @@ test('2PT conversion requires offense/defense play submission and resolves deter
   assert.equal(engine.state.phase, GamePhase.OFFENSE_SELECT);
   assert.equal(engine.state.field.possessionPlayerId, 'away');
   assert.equal(engine.state.players.home.score >= 6 && engine.state.players.home.score <= 8, true);
+  assert.equal(engine.state.lastPlay?.flags?.kickType, 'KICKOFF');
+  assert.match(engine.state.lastPlay?.message ?? '', /kickoff/i);
 });
 
 test('OT3 enforces mandatory two-point conversions', () => {
