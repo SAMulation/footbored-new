@@ -26,6 +26,7 @@ interface PlayerHandProps {
   bottomInset?: number;
   mode?: 'bottom' | 'sidebar';
   recommendedCardId?: string | null;
+  maxSidebarHeight?: number;
 }
 
 function getMiniCardTone(type: Card['type']) {
@@ -66,6 +67,7 @@ export function PlayerHand({
   bottomInset = 0,
   mode = 'bottom',
   recommendedCardId = null,
+  maxSidebarHeight,
 }: PlayerHandProps) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isSidebar = mode === 'sidebar';
@@ -109,8 +111,15 @@ export function PlayerHand({
     ? {
       flex: 1,
       minHeight: 0,
-      paddingBottom: 12,
+      flexShrink: 1,
+      paddingBottom: 8,
     }
+    : isPhone
+      ? {
+        minHeight: 142,
+        maxHeight: 214,
+        paddingBottom: Math.max(8, Math.round(bottomInset) + 4),
+      }
     : {
       minHeight: railBounds.minHeight,
       maxHeight: railBounds.maxHeight,
@@ -180,6 +189,7 @@ export function PlayerHand({
     <View
       style={[
         styles.container,
+        isPhone && styles.containerPhone,
         isSidebar && styles.containerSidebar,
         sizeStyle,
         disabled && styles.containerDisabled,
@@ -193,23 +203,60 @@ export function PlayerHand({
         </Text>
       </View>
 
-      {specialActions.length > 0 && (
-        isSidebar ? (
-          <View style={styles.sidebarSectionsContainer}>
-            {renderSection('Conversion', conversionActions)}
-            {renderSection('Specials', coreSpecialActions, {
-              collapsible: true,
-              collapsed: specialsCollapsed,
-              onToggle: () => setSpecialsCollapsed((current) => !current),
-            })}
-            {renderSection('Clock', clockActions)}
-          </View>
-        ) : isPhone ? (
+      {isSidebar ? (
+        <ScrollView
+          style={[styles.sidebarScroll, maxSidebarHeight ? { maxHeight: maxSidebarHeight } : null]}
+          contentContainerStyle={styles.sidebarScrollContent}
+          showsVerticalScrollIndicator>
+          {specialActions.length > 0 && (
+            <View style={styles.sidebarSectionsContainer}>
+              {renderSection('Conversion', conversionActions)}
+              {renderSection('Specials', coreSpecialActions, {
+                collapsible: true,
+                collapsed: specialsCollapsed,
+                onToggle: () => setSpecialsCollapsed((current) => !current),
+              })}
+              {renderSection('Clock', clockActions)}
+            </View>
+          )}
+
+          {hand.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Waiting for next down...</Text>
+            </View>
+          ) : (
+            <View style={styles.sidebarCardList}>
+              {hand.map((card) => {
+                const tone = getMiniCardTone(card.type);
+                const isRecommended = card.id === recommendedCardId;
+
+                return (
+                  <TouchableOpacity
+                    key={card.id}
+                    style={[
+                      styles.sidebarCardButton,
+                      tone,
+                      disabled && styles.specialActionDisabled,
+                      isRecommended && styles.sidebarCardRecommended,
+                    ]}
+                    onPress={() => onPlayCard(card.id)}
+                    disabled={disabled}>
+                    <Text style={styles.sidebarCardType}>{card.type}</Text>
+                    <Text style={styles.sidebarCardName} numberOfLines={1}>{card.name}</Text>
+                    {isRecommended ? <Text style={styles.sidebarRecommendedText}>REC</Text> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      ) : specialActions.length > 0 && (
+        isPhone ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             decelerationRate="fast"
-            snapToInterval={156}
+            snapToInterval={142}
             snapToAlignment="start"
             contentContainerStyle={styles.specialActionsCarouselTrack}>
             {specialActions.map((action) => renderActionChip(action, true))}
@@ -224,34 +271,10 @@ export function PlayerHand({
         )
       )}
 
-      {hand.length === 0 ? (
+      {!isSidebar && (hand.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Waiting for next down...</Text>
         </View>
-      ) : isSidebar ? (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarCardList}>
-          {hand.map((card) => {
-            const tone = getMiniCardTone(card.type);
-            const isRecommended = card.id === recommendedCardId;
-
-            return (
-              <TouchableOpacity
-                key={card.id}
-                style={[
-                  styles.sidebarCardButton,
-                  tone,
-                  disabled && styles.specialActionDisabled,
-                  isRecommended && styles.sidebarCardRecommended,
-                ]}
-                onPress={() => onPlayCard(card.id)}
-                disabled={disabled}>
-                <Text style={styles.sidebarCardType}>{card.type}</Text>
-                <Text style={styles.sidebarCardName} numberOfLines={1}>{card.name}</Text>
-                {isRecommended ? <Text style={styles.sidebarRecommendedText}>REC</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
       ) : (
         <ScrollView
           horizontal
@@ -268,7 +291,7 @@ export function PlayerHand({
             />
           ))}
         </ScrollView>
-      )}
+      ))}
     </View>
   );
 }
@@ -281,6 +304,10 @@ const styles = StyleSheet.create({
     borderTopColor: '#3a4454',
     paddingTop: 10,
     gap: 10,
+  },
+  containerPhone: {
+    paddingTop: 7,
+    gap: 7,
   },
   containerSidebar: {
     borderTopWidth: 0,
@@ -324,7 +351,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   sidebarSectionsContainer: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  sidebarScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  sidebarScrollContent: {
+    paddingBottom: 6,
     gap: 8,
   },
   sidebarSection: {
@@ -368,8 +403,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   specialActionsCarouselTrack: {
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 10,
+    gap: 6,
     paddingBottom: 2,
   },
   specialActionButton: {
@@ -381,8 +416,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   specialActionButtonCarousel: {
-    width: 148,
-    paddingVertical: 8,
+    width: 136,
+    minWidth: 136,
+    paddingVertical: 6,
   },
   specialActionButtonReady: {
     backgroundColor: '#204631',
@@ -419,17 +455,17 @@ const styles = StyleSheet.create({
   },
   specialActionReason: {
     color: '#aeb6c2',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     textTransform: 'capitalize',
   },
   cardsRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 4,
   },
   sidebarCardList: {
-    paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 6,
     gap: 8,
   },
   sidebarCardButton: {

@@ -50,3 +50,10 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN: Finish Plan: UI/UX Lab Polish and V
   - `playwright` wrapper also became network-blocked (`ENOTFOUND registry.npmjs.org`) when it attempted package resolution.
 - Follow-up TODO:
   - Re-run visual validation screenshots once network/package resolution is available, then tune any remaining spacing edge cases.
+
+- Follow-up UI fit pass (one-commit focus):
+  - Desktop: right rail containment tightened with desktop-only grid shell + sticky bounded rail container.
+  - Sidebar rail: converted to one scrollable surface (sections + cards) so actions are always reachable.
+  - Mobile: compressed HUD/card/rail spacing and reduced card footprint to prevent oversized controls.
+  - Field fit: updated phone width/height sizing to keep field visible without clipping on narrow screens.
+  - Added extra play-surface bottom padding when bottom rail is active to keep field/recap scroll-reachable.

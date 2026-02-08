@@ -70,10 +70,10 @@ export function PlayCard({ card, onPress, disabled = false, isRecommended = fals
 
     if (compact) {
       cardSize = {
-        width: Math.max(84, cardSize.width - 8),
-        height: Math.max(112, cardSize.height - 10),
-        icon: Math.max(26, cardSize.icon - 6),
-        name: Math.max(10, cardSize.name - 1),
+        width: Math.max(74, cardSize.width - 18),
+        height: Math.max(98, cardSize.height - 24),
+        icon: Math.max(22, cardSize.icon - 10),
+        name: Math.max(9, cardSize.name - 2),
       };
     }
 
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   },
   recommendedBadgeText: {
     color: '#2d2100',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.2,
   },
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingTop: 10,
+    paddingTop: 8,
   },
   typeChip: {
     color: '#0f1318',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   },
   costText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
   body: {
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   },
   familyText: {
     color: 'rgba(255,255,255,0.92)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.4,
   },
@@ -202,8 +202,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f2f4f6',
     borderTopColor: 'rgba(0,0,0,0.2)',
     borderTopWidth: 1,
-    minHeight: 34,
-    paddingVertical: 6,
+    minHeight: 30,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -213,6 +213,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     textAlign: 'center',
-    lineHeight: 13,
+    lineHeight: 11,
   },
 });

@@ -147,14 +147,15 @@ export function GameHud({
         <View
           style={[
             styles.connectionPill,
+            isPhone && styles.connectionPillPhone,
             isConnected && !isRejoining ? styles.connectionOnline : styles.connectionOffline,
           ]}>
           <Text style={styles.connectionText}>{connectionLabel}</Text>
         </View>
 
-        <Text style={styles.phaseBadge}>{formatPhase(phase)}</Text>
+        <Text style={[styles.phaseBadge, isPhone && styles.phaseBadgePhone]}>{formatPhase(phase)}</Text>
 
-        <View style={styles.clockBlock}>
+        <View style={[styles.clockBlock, isPhone && styles.clockBlockPhone]}>
           <Text style={styles.clockText}>Q{quarter} {formatClock(clockSeconds)}</Text>
           <Text style={styles.downText}>{formatDown(down)} & {toGo}</Text>
         </View>
@@ -200,19 +201,19 @@ export function GameHud({
       )}
 
       <View style={styles.checklistRow}>
-        <View style={[styles.checklistChip, checklistStates[0] === 'done' && styles.checklistChipDone, checklistStates[0] === 'active' && styles.checklistChipActive]}>
-          <Text style={[styles.checklistText, checklistStates[0] === 'active' && styles.checklistTextActive]}>1. Pick</Text>
+        <View style={[styles.checklistChip, isPhone && styles.checklistChipPhone, checklistStates[0] === 'done' && styles.checklistChipDone, checklistStates[0] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, isPhone && styles.checklistTextPhone, checklistStates[0] === 'active' && styles.checklistTextActive]}>1. Pick</Text>
         </View>
-        <View style={[styles.checklistChip, checklistStates[1] === 'done' && styles.checklistChipDone, checklistStates[1] === 'active' && styles.checklistChipActive]}>
-          <Text style={[styles.checklistText, checklistStates[1] === 'active' && styles.checklistTextActive]}>2. Lock</Text>
+        <View style={[styles.checklistChip, isPhone && styles.checklistChipPhone, checklistStates[1] === 'done' && styles.checklistChipDone, checklistStates[1] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, isPhone && styles.checklistTextPhone, checklistStates[1] === 'active' && styles.checklistTextActive]}>2. Lock</Text>
         </View>
-        <View style={[styles.checklistChip, checklistStates[2] === 'done' && styles.checklistChipDone, checklistStates[2] === 'active' && styles.checklistChipActive]}>
-          <Text style={[styles.checklistText, checklistStates[2] === 'active' && styles.checklistTextActive]}>3. Resolve</Text>
+        <View style={[styles.checklistChip, isPhone && styles.checklistChipPhone, checklistStates[2] === 'done' && styles.checklistChipDone, checklistStates[2] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, isPhone && styles.checklistTextPhone, checklistStates[2] === 'active' && styles.checklistTextActive]}>3. Resolve</Text>
         </View>
       </View>
 
-      <View style={styles.promptRow}>
-        <Text style={styles.promptText}>{prompt}</Text>
+      <View style={[styles.promptRow, isPhone && styles.promptRowPhone]}>
+        <Text style={[styles.promptText, isPhone && styles.promptTextPhone]}>{prompt}</Text>
       </View>
     </View>
   );
@@ -229,8 +230,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   containerPhone: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   statusRow: {
     flexDirection: 'row',
@@ -240,6 +241,7 @@ const styles = StyleSheet.create({
   },
   statusRowPhone: {
     flexWrap: 'wrap',
+    rowGap: 6,
   },
   connectionPill: {
     borderRadius: 999,
@@ -263,6 +265,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
+  connectionPillPhone: {
+    minWidth: 74,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
   phaseBadge: {
     color: '#1f1600',
     backgroundColor: '#f4d03f',
@@ -274,6 +281,11 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.4,
   },
+  phaseBadgePhone: {
+    fontSize: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   clockBlock: {
     backgroundColor: '#252d38',
     borderWidth: 1,
@@ -283,6 +295,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     minWidth: 118,
     alignItems: 'flex-end',
+  },
+  clockBlockPhone: {
+    minWidth: 102,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   clockText: {
     color: '#f4d03f',
@@ -304,7 +321,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   mobileScoreboard: {
-    gap: 8,
+    gap: 6,
   },
   mobileTeamRow: {
     flexDirection: 'row',
@@ -337,11 +354,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   teamBlockMobile: {
-    paddingVertical: 8,
-    minHeight: 64,
+    paddingVertical: 6,
+    minHeight: 56,
   },
   teamSubMobile: {
-    fontSize: 12,
+    fontSize: 11,
   },
   scoreBlock: {
     minWidth: 280,
@@ -357,7 +374,7 @@ const styles = StyleSheet.create({
   scoreBlockPhone: {
     minWidth: 0,
     width: '100%',
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   scoreText: {
     color: '#f7fbff',
@@ -367,8 +384,8 @@ const styles = StyleSheet.create({
     lineHeight: 42,
   },
   scoreTextPhone: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 28,
   },
   scoreSub: {
     color: '#b8c2cf',
@@ -395,6 +412,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
+  checklistChipPhone: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   checklistChipActive: {
     borderColor: '#f4d03f',
     backgroundColor: '#3b3113',
@@ -409,6 +430,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
   },
+  checklistTextPhone: {
+    fontSize: 10,
+  },
   checklistTextActive: {
     color: '#fff2bd',
   },
@@ -421,9 +445,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
+  promptRowPhone: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
   promptText: {
     color: '#e5ebf3',
     fontSize: 15,
     fontWeight: '800',
+  },
+  promptTextPhone: {
+    fontSize: 13,
   },
 });

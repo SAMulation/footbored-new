@@ -20,17 +20,23 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
   const isDesktopWide = viewportWidth >= 1500;
   const isDesktop = viewportWidth >= 1100;
   const isTablet = viewportWidth >= 700 && viewportWidth < 1100;
-  const isPhone = viewportWidth < 520;
+  const isPhone = viewportWidth < 620;
+  const isNarrowPhone = viewportWidth < 430;
 
   const trackWidth = useMemo(() => {
+    if (isPhone) {
+      const safePhoneWidth = Math.max(214, Math.min(360, Math.round(viewportWidth - 54)));
+      return safePhoneWidth;
+    }
+
     const widthPct = isWeb
       ? (isDesktopWide ? 0.78 : isDesktop ? 0.84 : isTablet ? 0.9 : 0.94)
       : 0.9;
     const raw = viewportWidth * widthPct;
-    return Math.max(isPhone ? 256 : 320, Math.min(isDesktopWide ? 1060 : 980, Math.round(raw)));
+    return Math.max(300, Math.min(isDesktopWide ? 1060 : 980, Math.round(raw)));
   }, [isDesktop, isDesktopWide, isPhone, isTablet, isWeb, viewportWidth]);
 
-  const trackHeight = isWeb ? (isDesktop ? 192 : isTablet ? 158 : 130) : 134;
+  const trackHeight = isWeb ? (isDesktop ? 184 : isTablet ? 148 : isNarrowPhone ? 104 : 114) : 124;
   const endZoneWidth = Math.max(24, Math.round(trackWidth * 0.08));
 
   const safeBallOn = clampToField(ballOn);
@@ -115,6 +121,7 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
             style={[
               styles.yardNumber,
               isPhone && styles.yardNumberPhone,
+              isNarrowPhone && styles.yardNumberNarrow,
               {
                 left: `${yardNumberPositions[idx]}%`,
               },
@@ -125,9 +132,9 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
       </View>
 
       <View style={[styles.metaRow, { width: trackWidth }]}>
-        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>Ball on {safeBallOn}</Text>
-        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>Line to gain {firstDownSpot}</Text>
-        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>{offenseDirectionLabel}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone, isNarrowPhone && styles.metaTextNarrow]}>Ball on {safeBallOn}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone, isNarrowPhone && styles.metaTextNarrow]}>Line to gain {firstDownSpot}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone, isNarrowPhone && styles.metaTextNarrow]}>{offenseDirectionLabel}</Text>
       </View>
     </View>
   );
@@ -137,8 +144,8 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 8,
+    paddingVertical: 8,
+    gap: 6,
   },
   track: {
     backgroundColor: '#2f7d35',
@@ -224,6 +231,10 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -8 }],
     fontSize: 9,
   },
+  yardNumberNarrow: {
+    transform: [{ translateX: -7 }],
+    fontSize: 8,
+  },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -238,5 +249,8 @@ const styles = StyleSheet.create({
   },
   metaTextPhone: {
     fontSize: 10,
+  },
+  metaTextNarrow: {
+    fontSize: 9,
   },
 });

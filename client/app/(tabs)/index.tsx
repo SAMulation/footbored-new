@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { FieldView } from '@/components/game/FieldView';
@@ -256,6 +256,7 @@ interface InGameShellProps {
   recommendedCardId: string | null;
   fieldFocusMode: boolean;
   onToggleFieldFocus: () => void;
+  railMaxHeight: number;
 }
 
 function InGameShell({
@@ -277,8 +278,25 @@ function InGameShell({
   recommendedCardId,
   fieldFocusMode,
   onToggleFieldFocus,
+  railMaxHeight,
 }: InGameShellProps) {
   const playContext = resolvePlayContext(gameState, isMyTurn);
+  const desktopGridStyle = showDesktopRail && Platform.OS === 'web'
+    ? ({
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) clamp(300px, 25vw, 360px)',
+      alignItems: 'start',
+      columnGap: 12,
+    } as const)
+    : null;
+  const desktopStickyRailStyle = showDesktopRail && Platform.OS === 'web'
+    ? ({
+      position: 'sticky',
+      top: 8,
+      alignSelf: 'start',
+      maxHeight: railMaxHeight,
+    } as const)
+    : null;
 
   return (
     <View style={[styles.inGameShell, isCompactDesktop && styles.inGameShellCompact]}>
@@ -304,7 +322,7 @@ function InGameShell({
         </View>
       )}
 
-      <View style={[styles.desktopArena, showDesktopRail && styles.desktopArenaActive]}>
+      <View style={[styles.desktopArena, showDesktopRail && styles.desktopArenaActive, desktopGridStyle]}>
         <View style={[
           styles.desktopMainColumn,
           showDesktopRail && styles.desktopMainColumnActive,
@@ -325,7 +343,7 @@ function InGameShell({
         </View>
 
         {showDesktopRail && (
-          <View style={styles.desktopRailColumn}>
+          <View style={[styles.desktopRailColumn, desktopStickyRailStyle]}>
             <PlayerHand
               hand={hand}
               onPlayCard={onPlayCard}
@@ -334,6 +352,7 @@ function InGameShell({
               disabledReason={railDisabledReason}
               mode="sidebar"
               recommendedCardId={recommendedCardId}
+              maxSidebarHeight={railMaxHeight - 12}
             />
           </View>
         )}
@@ -376,6 +395,7 @@ export default function GameScreen() {
   const isCompactDesktop = viewportWidth < 1280;
   const isDesktopRail = viewportWidth >= 1280;
   const isShortSurface = viewportHeight < 760;
+  const railMaxHeight = Math.max(320, viewportHeight - 236);
 
   const {
     gameState,
@@ -734,6 +754,9 @@ export default function GameScreen() {
           contentContainerStyle={[
             styles.playSurfaceContentWrap,
             isShortSurface && styles.playSurfaceContentWrapShort,
+            gameState && !isDesktopRail && !fieldFocusMode
+              ? (isPhone ? styles.playSurfaceBottomRailPhone : styles.playSurfaceBottomRail)
+              : null,
           ]}
           showsVerticalScrollIndicator={!isPhone}
           keyboardShouldPersistTaps="handled">
@@ -768,6 +791,7 @@ export default function GameScreen() {
                 recommendedCardId={recommendedCardId}
                 fieldFocusMode={fieldFocusMode}
                 onToggleFieldFocus={() => setFieldFocusMode((current) => !current)}
+                railMaxHeight={railMaxHeight}
               />
             )}
           </View>
@@ -858,6 +882,12 @@ const styles = StyleSheet.create({
   },
   playSurfaceContentWrapShort: {
     paddingVertical: 8,
+  },
+  playSurfaceBottomRail: {
+    paddingBottom: 124,
+  },
+  playSurfaceBottomRailPhone: {
+    paddingBottom: 156,
   },
   surfaceContent: {
     width: '100%',
@@ -1073,7 +1103,7 @@ const styles = StyleSheet.create({
   },
   desktopArenaActive: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
     gap: 12,
   },
   desktopMainColumn: {
@@ -1087,9 +1117,9 @@ const styles = StyleSheet.create({
     maxWidth: 1320,
   },
   desktopRailColumn: {
-    width: 360,
-    minWidth: 320,
-    maxWidth: 380,
+    width: '100%',
+    minWidth: 300,
+    maxWidth: 360,
     backgroundColor: '#171b22',
     borderRadius: 12,
     borderWidth: 1,
