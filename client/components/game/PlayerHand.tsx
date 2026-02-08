@@ -1,13 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 import { Card } from '../../../shared/types';
 import { PlayCard } from './PlayCard';
 
+export type SpecialActionCategory = 'conversion' | 'special' | 'clock';
+export type SpecialActionStatus = 'ready' | 'locked' | 'blocked';
+
 export interface SpecialActionItem {
   cardId: string;
   label: string;
   enabled: boolean;
+  category: SpecialActionCategory;
+  status: SpecialActionStatus;
+  reasonText?: string;
+  recommended?: boolean;
 }
 
 interface PlayerHandProps {
@@ -15,8 +22,10 @@ interface PlayerHandProps {
   onPlayCard: (cardId: string) => void;
   specialActions?: SpecialActionItem[];
   disabled?: boolean;
+  disabledReason?: string;
   bottomInset?: number;
   mode?: 'bottom' | 'sidebar';
+  recommendedCardId?: string | null;
 }
 
 function getMiniCardTone(type: Card['type']) {
@@ -29,17 +38,39 @@ function getMiniCardTone(type: Card['type']) {
   return { backgroundColor: '#7f4f24', borderColor: '#f4d03f' };
 }
 
+function resolveButtonStyle(status: SpecialActionStatus) {
+  if (status === 'ready') {
+    return {
+      button: styles.specialActionButtonReady,
+      text: styles.specialActionTextReady,
+    };
+  }
+  if (status === 'locked') {
+    return {
+      button: styles.specialActionButtonLocked,
+      text: styles.specialActionTextLocked,
+    };
+  }
+  return {
+    button: styles.specialActionButtonBlocked,
+    text: styles.specialActionTextBlocked,
+  };
+}
+
 export function PlayerHand({
   hand,
   onPlayCard,
   specialActions = [],
   disabled,
+  disabledReason,
   bottomInset = 0,
   mode = 'bottom',
+  recommendedCardId = null,
 }: PlayerHandProps) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isSidebar = mode === 'sidebar';
   const isPhone = viewportWidth < 620 && !isSidebar;
+  const [specialsCollapsed, setSpecialsCollapsed] = useState(false);
 
   const railBounds = useMemo(() => {
     let minHeight = 186;
@@ -86,7 +117,64 @@ export function PlayerHand({
       paddingBottom: Math.max(12, Math.round(bottomInset) + 8),
     };
 
-  const useWrappedActions = isPhone || isSidebar;
+  const conversionActions = specialActions.filter((action) => action.category === 'conversion');
+  const coreSpecialActions = specialActions.filter((action) => action.category === 'special');
+  const clockActions = specialActions.filter((action) => action.category === 'clock');
+
+  const renderActionChip = (action: SpecialActionItem, isCarousel = false) => {
+    const buttonStatus: SpecialActionStatus = disabled ? 'blocked' : action.status;
+    const tone = resolveButtonStyle(buttonStatus);
+    const reasonLabel = buttonStatus === 'ready' ? null : action.reasonText ?? disabledReason ?? 'Unavailable';
+
+    return (
+      <TouchableOpacity
+        key={action.cardId}
+        style={[
+          styles.specialActionButton,
+          tone.button,
+          isCarousel && styles.specialActionButtonCarousel,
+          action.recommended && styles.specialActionButtonRecommended,
+        ]}
+        onPress={() => onPlayCard(action.cardId)}
+        disabled={disabled || !action.enabled}>
+        <Text style={[styles.specialActionText, tone.text]} numberOfLines={1}>
+          {action.recommended ? '★ ' : ''}
+          {action.label}
+        </Text>
+        {reasonLabel && (
+          <Text style={styles.specialActionReason} numberOfLines={1}>
+            {reasonLabel}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSection = (
+    title: string,
+    actions: SpecialActionItem[],
+    opts?: { collapsible?: boolean; collapsed?: boolean; onToggle?: () => void },
+  ) => {
+    if (actions.length === 0) {
+      return null;
+    }
+
+    const isCollapsed = !!opts?.collapsed;
+
+    return (
+      <View style={styles.sidebarSection}>
+        <View style={styles.sidebarSectionHeader}>
+          <Text style={styles.sidebarSectionTitle}>{title}</Text>
+          {opts?.collapsible ? (
+            <TouchableOpacity onPress={opts.onToggle} style={styles.sectionToggle}>
+              <Text style={styles.sectionToggleText}>{isCollapsed ? 'Show' : 'Hide'}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {!isCollapsed && <View style={styles.sidebarActionWrap}>{actions.map((action) => renderActionChip(action))}</View>}
+      </View>
+    );
+  };
 
   return (
     <View
@@ -100,60 +188,38 @@ export function PlayerHand({
         <Text style={[styles.label, isPhone && styles.labelPhone, isSidebar && styles.labelSidebar]}>
           {isSidebar ? 'Play Calling' : 'Play Command Rail'}
         </Text>
-        <Text style={[styles.subLabel, isPhone && styles.subLabelPhone]}>{disabled ? 'Awaiting turn' : 'Pick your play'}</Text>
+        <Text style={[styles.subLabel, isPhone && styles.subLabelPhone]}>
+          {disabledReason ?? (disabled ? 'Awaiting turn' : 'Pick your play')}
+        </Text>
       </View>
 
       {specialActions.length > 0 && (
-        useWrappedActions ? (
-          <View style={[styles.specialActionsWrap, isPhone && styles.specialActionsWrapPhone]}>
-            {specialActions.map((action) => (
-              <TouchableOpacity
-                key={action.cardId}
-                style={[
-                  styles.specialActionButton,
-                  isPhone && styles.specialActionButtonPhone,
-                  !action.enabled && styles.specialActionButtonUnavailable,
-                  (!action.enabled || disabled) && styles.specialActionDisabled,
-                ]}
-                onPress={() => onPlayCard(action.cardId)}
-                disabled={disabled || !action.enabled}>
-                <Text
-                  style={[
-                    styles.specialActionText,
-                    isPhone && styles.specialActionTextPhone,
-                    !action.enabled && styles.specialActionTextUnavailable,
-                  ]}
-                  numberOfLines={1}>
-                  {action.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        isSidebar ? (
+          <View style={styles.sidebarSectionsContainer}>
+            {renderSection('Conversion', conversionActions)}
+            {renderSection('Specials', coreSpecialActions, {
+              collapsible: true,
+              collapsed: specialsCollapsed,
+              onToggle: () => setSpecialsCollapsed((current) => !current),
+            })}
+            {renderSection('Clock', clockActions)}
           </View>
+        ) : isPhone ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={156}
+            snapToAlignment="start"
+            contentContainerStyle={styles.specialActionsCarouselTrack}>
+            {specialActions.map((action) => renderActionChip(action, true))}
+          </ScrollView>
         ) : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.specialActionsRow}>
-            {specialActions.map((action) => (
-              <TouchableOpacity
-                key={action.cardId}
-                style={[
-                  styles.specialActionButton,
-                  !action.enabled && styles.specialActionButtonUnavailable,
-                  (!action.enabled || disabled) && styles.specialActionDisabled,
-                ]}
-                onPress={() => onPlayCard(action.cardId)}
-                disabled={disabled || !action.enabled}>
-                <Text
-                  style={[
-                    styles.specialActionText,
-                    !action.enabled && styles.specialActionTextUnavailable,
-                  ]}
-                  numberOfLines={1}>
-                  {action.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {specialActions.map((action) => renderActionChip(action))}
           </ScrollView>
         )
       )}
@@ -166,6 +232,8 @@ export function PlayerHand({
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarCardList}>
           {hand.map((card) => {
             const tone = getMiniCardTone(card.type);
+            const isRecommended = card.id === recommendedCardId;
+
             return (
               <TouchableOpacity
                 key={card.id}
@@ -173,11 +241,13 @@ export function PlayerHand({
                   styles.sidebarCardButton,
                   tone,
                   disabled && styles.specialActionDisabled,
+                  isRecommended && styles.sidebarCardRecommended,
                 ]}
                 onPress={() => onPlayCard(card.id)}
                 disabled={disabled}>
                 <Text style={styles.sidebarCardType}>{card.type}</Text>
                 <Text style={styles.sidebarCardName} numberOfLines={1}>{card.name}</Text>
+                {isRecommended ? <Text style={styles.sidebarRecommendedText}>REC</Text> : null}
               </TouchableOpacity>
             );
           })}
@@ -193,6 +263,8 @@ export function PlayerHand({
               card={card}
               onPress={() => onPlayCard(card.id)}
               disabled={disabled}
+              isRecommended={card.id === recommendedCardId}
+              compact={isPhone}
             />
           ))}
         </ScrollView>
@@ -246,53 +318,110 @@ const styles = StyleSheet.create({
     color: '#9ea5ad',
     fontSize: 12,
     fontWeight: '700',
+    textTransform: 'capitalize',
   },
   subLabelPhone: {
     fontSize: 11,
+  },
+  sidebarSectionsContainer: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  sidebarSection: {
+    borderWidth: 1,
+    borderColor: '#2d3645',
+    backgroundColor: '#1a202b',
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+  },
+  sidebarSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sidebarSectionTitle: {
+    color: '#c9d3e0',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  sectionToggle: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#4f6078',
+    backgroundColor: '#293245',
+  },
+  sectionToggleText: {
+    color: '#dfe7f4',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sidebarActionWrap: {
+    gap: 6,
   },
   specialActionsRow: {
     paddingHorizontal: 16,
     gap: 8,
   },
-  specialActionsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  specialActionsWrapPhone: {
+  specialActionsCarouselTrack: {
     paddingHorizontal: 12,
-    gap: 6,
+    gap: 8,
+    paddingBottom: 2,
   },
   specialActionButton: {
-    backgroundColor: '#7f4f24',
-    borderColor: '#f4d03f',
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 7,
+    minWidth: 118,
+    gap: 2,
   },
-  specialActionButtonPhone: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  specialActionButtonCarousel: {
+    width: 148,
+    paddingVertical: 8,
   },
-  specialActionButtonUnavailable: {
-    backgroundColor: '#3d2f27',
-    borderColor: '#8d7a6b',
+  specialActionButtonReady: {
+    backgroundColor: '#204631',
+    borderColor: '#6fdea4',
+  },
+  specialActionButtonLocked: {
+    backgroundColor: '#4c371b',
+    borderColor: '#f2ca64',
+  },
+  specialActionButtonBlocked: {
+    backgroundColor: '#323943',
+    borderColor: '#5d6673',
+    opacity: 0.9,
+  },
+  specialActionButtonRecommended: {
+    borderColor: '#f4d03f',
+    borderWidth: 2,
   },
   specialActionDisabled: {
-    opacity: 0.45,
+    opacity: 0.5,
   },
   specialActionText: {
-    color: '#fff4cc',
     fontSize: 12,
     fontWeight: '800',
   },
-  specialActionTextPhone: {
-    fontSize: 11,
+  specialActionTextReady: {
+    color: '#eafff1',
   },
-  specialActionTextUnavailable: {
-    color: '#dccdbd',
+  specialActionTextLocked: {
+    color: '#fff0c7',
+  },
+  specialActionTextBlocked: {
+    color: '#d5dbe3',
+  },
+  specialActionReason: {
+    color: '#aeb6c2',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
   cardsRow: {
     paddingHorizontal: 16,
@@ -312,6 +441,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  sidebarCardRecommended: {
+    borderColor: '#f4d03f',
+    borderWidth: 2,
+  },
   sidebarCardType: {
     color: '#f5fbff',
     backgroundColor: 'rgba(0,0,0,0.18)',
@@ -327,6 +460,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     flex: 1,
+  },
+  sidebarRecommendedText: {
+    color: '#201700',
+    backgroundColor: '#f4d03f',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    fontSize: 10,
+    fontWeight: '900',
   },
   emptyState: {
     flex: 1,

@@ -8,6 +8,8 @@ interface PlayCardProps {
   card: Card;
   onPress: () => void;
   disabled?: boolean;
+  isRecommended?: boolean;
+  compact?: boolean;
 }
 
 function getCardColor(type: Card['type']) {
@@ -30,7 +32,7 @@ function getCardFamily(type: Card['type']): string {
   return 'SPECIAL';
 }
 
-export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
+export function PlayCard({ card, onPress, disabled = false, isRecommended = false, compact = false }: PlayCardProps) {
   const backgroundColor = getCardColor(card.type);
   const iconName = getCardIcon(card.type);
   const familyLabel = getCardFamily(card.type);
@@ -66,8 +68,17 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
       };
     }
 
+    if (compact) {
+      cardSize = {
+        width: Math.max(84, cardSize.width - 8),
+        height: Math.max(112, cardSize.height - 10),
+        icon: Math.max(26, cardSize.icon - 6),
+        name: Math.max(10, cardSize.name - 1),
+      };
+    }
+
     return cardSize;
-  }, [viewportWidth, viewportHeight]);
+  }, [compact, viewportWidth, viewportHeight]);
 
   return (
     <Pressable
@@ -78,6 +89,7 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
           width: size.width,
           height: size.height,
         },
+        isRecommended && styles.cardRecommended,
         disabled && styles.cardDisabled,
         pressed && !disabled && styles.cardPressed,
       ]}
@@ -85,6 +97,12 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={`${card.name} (${card.type})`}>
+      {isRecommended && (
+        <View style={styles.recommendedBadge}>
+          <Text style={styles.recommendedBadgeText}>Recommended</Text>
+        </View>
+      )}
+
       <View style={styles.header}>
         <Text style={styles.typeChip}>{card.type}</Text>
         <Text style={styles.costText}>1</Text>
@@ -117,6 +135,27 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  cardRecommended: {
+    borderColor: '#f4d03f',
+    shadowColor: '#f4d03f',
+    shadowOpacity: 0.35,
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#f4d03f',
+    paddingVertical: 2,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  recommendedBadgeText: {
+    color: '#2d2100',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
   cardPressed: {
     transform: [{ translateY: 1 }],
     shadowOpacity: 0.12,
@@ -130,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingTop: 8,
+    paddingTop: 10,
   },
   typeChip: {
     color: '#0f1318',

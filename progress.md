@@ -30,3 +30,23 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN: Finish Plan: UI/UX Lab Polish and V
   - `develop-web-game` script currently fails in this environment due missing `playwright` package import resolution; continued verification used `playwright` skill CLI wrapper with equivalent snapshot/screenshot loop.
 - Next TODO:
   - Add a project-local `playwright` dependency or adjust `$WEB_GAME_CLIENT` launcher so `develop-web-game` script runs directly without fallback.
+
+- UX pass (current): implemented 10-item polish sweep + visual refresh in client UI.
+- Implemented in this pass:
+  - GameHud: added turn checklist chips; denser central score context line (`Q/clock/down-distance/ball-on`).
+  - Recap formatting: standardized recap copy toward `Cause -> Calculation -> Result` structure where parseable.
+  - In-game toast: auto-fading mini recap toast after new plays.
+  - PlayerHand states: explicit `ready/locked/blocked` action states with reason text.
+  - Recommendation hints: added recommended action highlighting for both specials and hand cards.
+  - Desktop right rail: grouped action sections (Conversion/Specials/Clock) with collapsible Specials group.
+  - Mobile action rail: converted special chips to horizontal snap carousel to avoid overlap/wrapping.
+  - Field focus mode: toggle to hide controls rail and prioritize field + reporting view.
+  - High-impact confirmations: FG/PT/TO/2PT selections now require confirm/cancel modal.
+  - Modern polish: updated button/badge styling, hierarchy, and contrast across HUD/rails/cards.
+- Validation in this pass:
+  - `npm --prefix /Users/sam/Downloads/Projects/footbored-new/client run lint` pass.
+- Tooling caveat remains:
+  - `develop-web-game` script still fails due unresolved `playwright` package import in this environment.
+  - `playwright` wrapper also became network-blocked (`ENOTFOUND registry.npmjs.org`) when it attempted package resolution.
+- Follow-up TODO:
+  - Re-run visual validation screenshots once network/package resolution is available, then tune any remaining spacing edge cases.

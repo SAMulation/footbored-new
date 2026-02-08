@@ -10,6 +10,7 @@ interface GameHudProps {
   clockSeconds: number;
   down: number;
   toGo: number;
+  ballOn: number;
   possession: 'home' | 'away';
   isConnected: boolean;
   isRejoining: boolean;
@@ -21,6 +22,8 @@ interface GameHudProps {
   homeDeckCount: number;
   awayDeckCount: number;
 }
+
+type ChecklistState = 'active' | 'done' | 'upcoming';
 
 function formatClock(clockSeconds: number): string {
   const safe = Math.max(0, clockSeconds);
@@ -79,6 +82,37 @@ function resolvePrompt({
   return 'Ready for kickoff';
 }
 
+function resolveChecklistStates({
+  phase,
+  waitingForOpponent,
+  isMyTurn,
+}: {
+  phase: GamePhase | null;
+  waitingForOpponent: boolean;
+  isMyTurn: boolean;
+}): [ChecklistState, ChecklistState, ChecklistState] {
+  const inSelectPhase =
+    phase === GamePhase.OFFENSE_SELECT ||
+    phase === GamePhase.DEFENSE_SELECT ||
+    phase === GamePhase.CONVERSION_OFFENSE_SELECT ||
+    phase === GamePhase.CONVERSION_DEFENSE_SELECT;
+  const inResolvePhase = phase === GamePhase.RESOLUTION || phase === GamePhase.CONVERSION_RESOLUTION;
+
+  if (phase === GamePhase.GAME_OVER) {
+    return ['done', 'done', 'done'];
+  }
+  if (inResolvePhase) {
+    return ['done', 'done', 'active'];
+  }
+  if (waitingForOpponent || (inSelectPhase && !isMyTurn)) {
+    return ['done', 'active', 'upcoming'];
+  }
+  if (inSelectPhase && isMyTurn) {
+    return ['active', 'upcoming', 'upcoming'];
+  }
+  return ['upcoming', 'upcoming', 'upcoming'];
+}
+
 export function GameHud({
   homeScore,
   awayScore,
@@ -86,6 +120,7 @@ export function GameHud({
   clockSeconds,
   down,
   toGo,
+  ballOn,
   possession,
   isConnected,
   isRejoining,
@@ -103,6 +138,8 @@ export function GameHud({
 
   const connectionLabel = isRejoining ? 'REJOINING' : isConnected ? 'ONLINE' : 'OFFLINE';
   const prompt = resolvePrompt({ isRejoining, waitingForOpponent, phase, isMyTurn });
+  const checklistStates = resolveChecklistStates({ phase, waitingForOpponent, isMyTurn });
+  const scoreContext = `Q${quarter} ${formatClock(clockSeconds)} • ${formatDown(down)} & ${toGo} • Ball on ${ballOn}`;
 
   return (
     <View style={[styles.container, isPhone && styles.containerPhone]}>
@@ -152,6 +189,7 @@ export function GameHud({
           <View style={styles.scoreBlock}>
             <Text style={styles.scoreText}>{homeScore} - {awayScore}</Text>
             <Text style={styles.scoreSub}>HOME vs AWAY</Text>
+            <Text style={styles.scoreContext}>{scoreContext}</Text>
           </View>
 
           <View style={[styles.teamBlock, possession === 'away' && styles.teamBlockPossession]}>
@@ -160,6 +198,18 @@ export function GameHud({
           </View>
         </View>
       )}
+
+      <View style={styles.checklistRow}>
+        <View style={[styles.checklistChip, checklistStates[0] === 'done' && styles.checklistChipDone, checklistStates[0] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, checklistStates[0] === 'active' && styles.checklistTextActive]}>1. Pick</Text>
+        </View>
+        <View style={[styles.checklistChip, checklistStates[1] === 'done' && styles.checklistChipDone, checklistStates[1] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, checklistStates[1] === 'active' && styles.checklistTextActive]}>2. Lock</Text>
+        </View>
+        <View style={[styles.checklistChip, checklistStates[2] === 'done' && styles.checklistChipDone, checklistStates[2] === 'active' && styles.checklistChipActive]}>
+          <Text style={[styles.checklistText, checklistStates[2] === 'active' && styles.checklistTextActive]}>3. Resolve</Text>
+        </View>
+      </View>
 
       <View style={styles.promptRow}>
         <Text style={styles.promptText}>{prompt}</Text>
@@ -294,7 +344,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   scoreBlock: {
-    minWidth: 240,
+    minWidth: 280,
     backgroundColor: '#232a34',
     borderColor: '#4a5668',
     borderWidth: 1,
@@ -321,22 +371,59 @@ const styles = StyleSheet.create({
     lineHeight: 34,
   },
   scoreSub: {
-    color: '#b9c8db',
-    fontSize: 11,
+    color: '#b8c2cf',
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  scoreContext: {
+    marginTop: 4,
+    color: '#f2d66c',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  checklistChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#445062',
+    backgroundColor: '#202733',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  checklistChipActive: {
+    borderColor: '#f4d03f',
+    backgroundColor: '#3b3113',
+  },
+  checklistChipDone: {
+    borderColor: '#59d38f',
+    backgroundColor: '#193727',
+  },
+  checklistText: {
+    color: '#a8b1bf',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  checklistTextActive: {
+    color: '#fff2bd',
   },
   promptRow: {
-    backgroundColor: '#1f2530',
-    borderWidth: 1,
-    borderColor: '#374150',
+    width: '100%',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#2f3948',
+    backgroundColor: '#1f2734',
     paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   promptText: {
-    color: '#edf5ee',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#e5ebf3',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

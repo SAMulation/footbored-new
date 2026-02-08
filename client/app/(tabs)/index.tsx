@@ -4,7 +4,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
-import { PlayerHand, SpecialActionItem } from '@/components/game/PlayerHand';
+import { PlayerHand, SpecialActionCategory, SpecialActionItem } from '@/components/game/PlayerHand';
 import { useGameSocket } from '../../hooks/use-game-socket';
 import { Card, ClientGameState, GamePhase, PlayType } from '../../../shared/types';
 
@@ -23,9 +23,49 @@ const SPECIAL_ACTION_LABELS: Record<PlayType, string> = {
 };
 
 const SPECIAL_ACTION_PRIORITY: PlayType[] = ['XP', '2PT', 'TP', 'HM', 'FG', 'PT', 'TO'];
+const HIGH_IMPACT_TYPES = new Set<PlayType>(['FG', 'PT', 'TO', '2PT']);
 
 function generateRoomCode(): string {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+function resolveActionCategory(type: PlayType): SpecialActionCategory {
+  if (type === 'XP' || type === '2PT') return 'conversion';
+  if (type === 'TO') return 'clock';
+  return 'special';
+}
+
+function formatActionReason(reason?: string): string {
+  if (!reason) return 'Not legal right now';
+
+  if (reason === 'mandatory_two_point') return '2PT required';
+  if (reason === 'offense_only') return 'Offense only';
+  if (reason === 'fourth_down_only') return '4th down only';
+  if (reason === 'timeouts_exhausted') return 'No timeouts left';
+  if (reason === 'hm_exhausted') return 'Hail Mary exhausted';
+  if (reason === 'tp_exhausted') return 'Trick Play exhausted';
+
+  return reason.replace(/_/g, ' ');
+}
+
+function normalizeRecapMessage(message: string): string {
+  const trimmed = message.trim();
+
+  const standardMatch = trimmed.match(
+    /^(.+?)\s*->\s*quality\s+([^;]+);\s*multiplier\s+([^;]+);\s*yard card\s+([^;]+);\s*result\s+(.+)\.?$/i,
+  );
+  if (standardMatch) {
+    const [, cause, quality, multiplier, yardCard, result] = standardMatch;
+    return `Cause: ${cause} | Calculation: quality ${quality}, multiplier ${multiplier}, yard card ${yardCard} | Result: ${result.replace(/\.$/, '')}`;
+  }
+
+  const causeResultMatch = trimmed.match(/^(.+?)\s*->\s*(.+)$/);
+  if (causeResultMatch) {
+    const [, cause, result] = causeResultMatch;
+    return `Cause: ${cause} | Result: ${result.replace(/\.$/, '')}`;
+  }
+
+  return trimmed;
 }
 
 function formatLastPlayMessage(gameState: ClientGameState): string | null {
@@ -33,44 +73,48 @@ function formatLastPlayMessage(gameState: ClientGameState): string | null {
     return null;
   }
 
-  const message = gameState.lastPlay.message;
+  const baseMessage = normalizeRecapMessage(gameState.lastPlay.message);
   const flags = gameState.lastPlay.flags;
-  const detailParts: string[] = [];
+  const contextParts: string[] = [];
 
   if (flags?.kickType) {
-    detailParts.push(flags.kickType.replace('_', ' '));
+    contextParts.push(`Kick ${flags.kickType.replace('_', ' ')}`);
   }
   if (typeof flags?.kickDistance === 'number') {
-    detailParts.push(`${flags.kickDistance}y`);
+    contextParts.push(`${flags.kickDistance}y`);
   }
   if (typeof flags?.kickResultSpot === 'number') {
-    detailParts.push(`Spot ${flags.kickResultSpot}`);
+    contextParts.push(`Spot ${flags.kickResultSpot}`);
   }
   if (typeof flags?.returnYards === 'number' && flags.returnYards > 0) {
-    detailParts.push(`Return ${flags.returnYards}y`);
+    contextParts.push(`Return ${flags.returnYards}y`);
   }
   if (flags?.kickoffTouchback) {
-    detailParts.push('Touchback');
+    contextParts.push('Touchback');
   }
   if (flags?.icedKicker) {
-    detailParts.push('Iced');
+    contextParts.push('Iced kicker');
   }
   if (flags?.conversionType) {
-    detailParts.push(`Conversion ${flags.conversionType}`);
+    contextParts.push(`Conversion ${flags.conversionType}`);
   }
   if (typeof flags?.conversionSuccess === 'boolean') {
-    detailParts.push(flags.conversionSuccess ? 'Good' : 'Failed');
+    contextParts.push(flags.conversionSuccess ? 'Conversion good' : 'Conversion failed');
   }
   if (flags?.mandatoryTwoPoint) {
-    detailParts.push('Mandatory 2PT');
+    contextParts.push('Mandatory 2PT');
   }
   if (flags?.otBucketReset) {
-    detailParts.push('OT Bucket Reset');
+    contextParts.push('OT resource reset');
   }
 
-  return detailParts.length > 0
-    ? `${message}\n${detailParts.join(' | ')}`
-    : message;
+  return contextParts.length > 0 ? `${baseMessage}\nContext: ${contextParts.join(' • ')}` : baseMessage;
+}
+
+function buildToastMessage(gameState: ClientGameState): string | null {
+  if (!gameState.lastPlay?.message) return null;
+  const normalized = normalizeRecapMessage(gameState.lastPlay.message);
+  return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
 }
 
 function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { title: string; message: string } {
@@ -100,6 +144,7 @@ function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { ti
       message: 'Waiting for opponent to lock in a card...',
     };
   }
+
   const lastPlayMessage = formatLastPlayMessage(gameState);
   if (lastPlayMessage) {
     return {
@@ -107,6 +152,7 @@ function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { ti
       message: lastPlayMessage,
     };
   }
+
   if (isMyTurn) {
     if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
       const forced = gameState.conversion?.mandatoryTwoPoint;
@@ -128,6 +174,7 @@ function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { ti
       message: 'Select one card from your rail to resolve this down.',
     };
   }
+
   return {
     title: 'STATUS',
     message: 'Opponent is choosing their card.',
@@ -199,11 +246,16 @@ interface InGameShellProps {
   isPhone: boolean;
   isCompactDesktop: boolean;
   transientNotice: string | null;
+  playToast: string | null;
   showDesktopRail: boolean;
   hand: Card[];
   specialActions: SpecialActionItem[];
   onPlayCard: (cardId: string) => void;
   railDisabled: boolean;
+  railDisabledReason?: string;
+  recommendedCardId: string | null;
+  fieldFocusMode: boolean;
+  onToggleFieldFocus: () => void;
 }
 
 function InGameShell({
@@ -215,18 +267,28 @@ function InGameShell({
   isPhone,
   isCompactDesktop,
   transientNotice,
+  playToast,
   showDesktopRail,
   hand,
   specialActions,
   onPlayCard,
   railDisabled,
+  railDisabledReason,
+  recommendedCardId,
+  fieldFocusMode,
+  onToggleFieldFocus,
 }: InGameShellProps) {
   const playContext = resolvePlayContext(gameState, isMyTurn);
 
   return (
     <View style={[styles.inGameShell, isCompactDesktop && styles.inGameShellCompact]}>
       <View style={[styles.inGameTopRow, isCompactDesktop && styles.inGameTopRowCompact]}>
-        {matchMode === 'BOT' ? <Text style={styles.modeBadge}>BOT MATCH</Text> : <View />}
+        <View style={styles.topRowLeftCluster}>
+          {matchMode === 'BOT' ? <Text style={styles.modeBadge}>BOT MATCH</Text> : <View />}
+          <TouchableOpacity style={styles.focusToggle} onPress={onToggleFieldFocus}>
+            <Text style={styles.focusToggleText}>{fieldFocusMode ? 'Show Controls' : 'Field Focus'}</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.roomBadge}>ROOM: {roomId ?? 'N/A'}</Text>
       </View>
 
@@ -236,9 +298,19 @@ function InGameShell({
         </View>
       )}
 
+      {playToast && (
+        <View style={styles.playToast}>
+          <Text style={styles.playToastText}>{playToast}</Text>
+        </View>
+      )}
+
       <View style={[styles.desktopArena, showDesktopRail && styles.desktopArenaActive]}>
-        <View style={[styles.desktopMainColumn, showDesktopRail && styles.desktopMainColumnActive]}>
-          <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact]}>
+        <View style={[
+          styles.desktopMainColumn,
+          showDesktopRail && styles.desktopMainColumnActive,
+          fieldFocusMode && styles.desktopMainColumnFocused,
+        ]}>
+          <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact, fieldFocusMode && styles.fieldFrameFocus]}>
             <FieldView
               ballOn={gameState.field.ballOn}
               toGo={gameState.field.toGo}
@@ -259,7 +331,9 @@ function InGameShell({
               onPlayCard={onPlayCard}
               specialActions={specialActions}
               disabled={railDisabled}
+              disabledReason={railDisabledReason}
               mode="sidebar"
+              recommendedCardId={recommendedCardId}
             />
           </View>
         )}
@@ -289,6 +363,12 @@ function GameOverShell({ homeScore, awayScore, winner, onPlayAgain, isPhone }: G
   );
 }
 
+interface PendingConfirm {
+  cardId: string;
+  type: PlayType;
+  label: string;
+}
+
 export default function GameScreen() {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const tabBarHeight = useBottomTabBarHeight();
@@ -313,11 +393,18 @@ export default function GameScreen() {
   } = useGameSocket();
   const [roomInput, setRoomInput] = useState('TEST_ROOM');
   const [gameplayNotice, setGameplayNotice] = useState<string | null>(null);
+  const [playToast, setPlayToast] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [fieldFocusMode, setFieldFocusMode] = useState(false);
+
   const gameplayNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGameplayErrorRef = useRef<string | null>(null);
+  const lastPlayKeyRef = useRef<string | null>(null);
 
   const mySide = seat ?? (gameState?.myState.teamName === 'Away Team' ? 'away' : 'home');
   const possession = gameState?.field.possessionPlayerId === 'away' ? 'away' : 'home';
+  const isGameOver = gameState?.phase === GamePhase.GAME_OVER;
 
   const isMyTurn = !!gameState && (() => {
     if (gameState.waitingForOpponent) {
@@ -354,26 +441,86 @@ export default function GameScreen() {
     ? (mySide === 'away' ? gameState.myState.deckCount : gameState.opponentState.deckCount)
     : 0;
 
-  const specialActionsByType = useMemo(() => {
-    const byType = new Map<PlayType, { id: string; enabled: boolean; remaining: number | null; reason?: string }>();
-    if (!gameState) return byType;
+  const displayedHand = useMemo(() => {
+    if (!gameState) {
+      return [];
+    }
+    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      return [];
+    }
+    return gameState.myState.hand;
+  }, [gameState]);
 
-    for (const action of gameState.myState.specialActions) {
-      if (!byType.has(action.type)) {
-        byType.set(action.type, {
-          id: action.id,
-          enabled: action.enabled,
-          remaining: action.remaining,
-          reason: action.reason,
-        });
+  const recommendedCardId = useMemo(() => {
+    if (!gameState || !isMyTurn || isGameOver || isRejoining) {
+      return null;
+    }
+
+    const findSpecial = (type: PlayType) => {
+      const action = gameState.myState.specialActions.find((item) => item.type === type && item.enabled);
+      return action?.id ?? null;
+    };
+
+    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      if (gameState.conversion?.mandatoryTwoPoint) {
+        return findSpecial('2PT');
+      }
+      return findSpecial('XP') ?? findSpecial('2PT');
+    }
+
+    if (gameState.phase === GamePhase.DEFENSE_SELECT || gameState.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      return (
+        displayedHand.find((card) => card.type === 'SP')?.id ??
+        displayedHand.find((card) => card.type === 'SR')?.id ??
+        displayedHand[0]?.id ??
+        null
+      );
+    }
+
+    if (gameState.phase === GamePhase.OFFENSE_SELECT) {
+      const { down, toGo, ballOn } = gameState.field;
+
+      if (down === 4) {
+        if (ballOn >= 63 && toGo <= 7) {
+          const fg = findSpecial('FG');
+          if (fg) return fg;
+        }
+
+        if (toGo >= 6 || ballOn < 45) {
+          const punt = findSpecial('PT');
+          if (punt) return punt;
+        }
+      }
+
+      if (toGo >= 15) {
+        const hm = findSpecial('HM');
+        if (hm) return hm;
+      }
+
+      if (toGo <= 2) {
+        return (
+          displayedHand.find((card) => card.type === 'SR')?.id ??
+          displayedHand.find((card) => card.type === 'SP')?.id ??
+          displayedHand[0]?.id ??
+          null
+        );
+      }
+
+      if (toGo >= 10) {
+        return (
+          displayedHand.find((card) => card.type === 'LP')?.id ??
+          displayedHand.find((card) => card.type === 'LR')?.id ??
+          displayedHand[0]?.id ??
+          null
+        );
       }
     }
 
-    return byType;
-  }, [gameState]);
+    return displayedHand[0]?.id ?? null;
+  }, [displayedHand, gameState, isGameOver, isMyTurn, isRejoining]);
 
   const specialActionItems = useMemo(() => {
-    if (!gameState || !isMyTurn) {
+    if (!gameState) {
       return [];
     }
 
@@ -386,45 +533,61 @@ export default function GameScreen() {
       .slice()
       .sort((a, b) => toPriority(a.type) - toPriority(b.type))
       .map((action) => {
-        const state = specialActionsByType.get(action.type);
-        if (!state) return null;
         const label = SPECIAL_ACTION_LABELS[action.type] ?? action.type;
-        const suffix = state.remaining === null ? '' : ` (${state.remaining})`;
-        let reasonSuffix = '';
-        if (!state.enabled) {
-          if (state.reason === 'mandatory_two_point') {
-            reasonSuffix = ' - locked (2PT required)';
-          } else if (state.reason === 'offense_only') {
-            reasonSuffix = ' - offense only';
-          } else if (state.reason === 'fourth_down_only') {
-            reasonSuffix = ' - 4th down only';
-          } else if (state.reason === 'timeouts_exhausted') {
-            reasonSuffix = ' - no timeouts';
-          } else if (state.reason === 'hm_exhausted') {
-            reasonSuffix = ' - HM exhausted';
-          } else if (state.reason === 'tp_exhausted') {
-            reasonSuffix = ' - TP exhausted';
-          } else if (state.reason) {
-            reasonSuffix = ` - ${state.reason.replace(/_/g, ' ')}`;
-          }
-        }
-        return {
-          cardId: state.id,
-          label: `${label}${suffix}${reasonSuffix}`,
-          enabled: state.enabled,
-        };
-      })
-      .filter((item): item is SpecialActionItem => item !== null);
-  }, [gameState, isMyTurn, specialActionsByType]);
+        const suffix = action.remaining === null ? '' : ` (${action.remaining})`;
 
-  const displayedHand = useMemo(() => {
-    if (!gameState) {
-      return [];
+        let status: SpecialActionItem['status'] = 'ready';
+        let reasonText: string | undefined;
+        if (isRejoining) {
+          status = 'blocked';
+          reasonText = 'Reconnecting';
+        } else if (isGameOver) {
+          status = 'blocked';
+          reasonText = 'Game over';
+        } else if (!isMyTurn) {
+          status = 'blocked';
+          reasonText = 'Wait your turn';
+        } else if (!action.enabled) {
+          status = 'locked';
+          reasonText = formatActionReason(action.reason);
+        }
+
+        return {
+          cardId: action.id,
+          label: `${label}${suffix}`,
+          enabled: status === 'ready',
+          category: resolveActionCategory(action.type),
+          status,
+          reasonText,
+          recommended: action.id === recommendedCardId,
+        } as SpecialActionItem;
+      });
+  }, [gameState, isGameOver, isMyTurn, isRejoining, recommendedCardId]);
+
+  const playTypeByCardId = useMemo(() => {
+    const map = new Map<string, PlayType>();
+    if (!gameState) return map;
+
+    for (const card of gameState.myState.hand) {
+      map.set(card.id, card.type);
     }
-    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
-      return [];
+    for (const action of gameState.myState.specialActions) {
+      map.set(action.id, action.type);
     }
-    return gameState.myState.hand;
+    return map;
+  }, [gameState]);
+
+  const cardLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!gameState) return map;
+
+    for (const card of gameState.myState.hand) {
+      map.set(card.id, card.name);
+    }
+    for (const action of gameState.myState.specialActions) {
+      map.set(action.id, SPECIAL_ACTION_LABELS[action.type] ?? action.type);
+    }
+    return map;
   }, [gameState]);
 
   const joinSelectedRoom = () => {
@@ -441,10 +604,32 @@ export default function GameScreen() {
     joinGame(code);
   };
 
-  const isGameOver = gameState?.phase === 'GAME_OVER';
-  const winner = homeScore === awayScore ? 'DRAW' : homeScore > awayScore ? 'HOME' : 'AWAY';
+  const confirmAndPlayCard = (cardId: string) => {
+    const type = playTypeByCardId.get(cardId);
+    if (type && HIGH_IMPACT_TYPES.has(type)) {
+      setPendingConfirm({
+        cardId,
+        type,
+        label: cardLabelById.get(cardId) ?? SPECIAL_ACTION_LABELS[type] ?? type,
+      });
+      return;
+    }
+
+    playCard(cardId);
+  };
+
   const isInGame = !!gameState;
   const showJoinError = !!joinError && !isInGame;
+  const winner = homeScore === awayScore ? 'DRAW' : homeScore > awayScore ? 'HOME' : 'AWAY';
+
+  const railDisabled = !isMyTurn || isGameOver || isRejoining;
+  const railDisabledReason = isRejoining
+    ? 'reconnecting'
+    : isGameOver
+      ? 'game over'
+      : !isMyTurn
+        ? 'opponent turn'
+        : undefined;
 
   useEffect(() => {
     if (!isInGame || !joinError) {
@@ -462,16 +647,64 @@ export default function GameScreen() {
     }
     gameplayNoticeTimerRef.current = setTimeout(() => {
       setGameplayNotice(null);
-    }, 2600);
+    }, 2400);
   }, [isInGame, joinError]);
+
+  useEffect(() => {
+    if (!gameState?.lastPlay?.message) {
+      return;
+    }
+
+    const key = `${gameState.lastPlay.message}|${gameState.field.quarter}|${gameState.field.clockSeconds}|${gameState.field.down}|${gameState.field.ballOn}`;
+    if (lastPlayKeyRef.current === key) {
+      return;
+    }
+    lastPlayKeyRef.current = key;
+
+    const toast = buildToastMessage(gameState);
+    if (!toast) {
+      return;
+    }
+
+    setPlayToast(toast);
+    if (playToastTimerRef.current) {
+      clearTimeout(playToastTimerRef.current);
+    }
+    playToastTimerRef.current = setTimeout(() => {
+      setPlayToast(null);
+    }, 2600);
+  }, [gameState]);
+
+  useEffect(() => {
+    if (!isInGame) {
+      setPendingConfirm(null);
+      setFieldFocusMode(false);
+    }
+  }, [isInGame]);
+
+  useEffect(() => {
+    if (!isDesktopRail && fieldFocusMode) {
+      setFieldFocusMode(false);
+    }
+  }, [fieldFocusMode, isDesktopRail]);
 
   useEffect(() => {
     return () => {
       if (gameplayNoticeTimerRef.current) {
         clearTimeout(gameplayNoticeTimerRef.current);
       }
+      if (playToastTimerRef.current) {
+        clearTimeout(playToastTimerRef.current);
+      }
     };
   }, []);
+
+  const closeConfirm = () => setPendingConfirm(null);
+  const commitConfirm = () => {
+    if (!pendingConfirm) return;
+    playCard(pendingConfirm.cardId);
+    setPendingConfirm(null);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -482,6 +715,7 @@ export default function GameScreen() {
         clockSeconds={gameState?.field.clockSeconds ?? 900}
         down={gameState?.field.down ?? 1}
         toGo={gameState?.field.toGo ?? 10}
+        ballOn={gameState?.field.ballOn ?? 25}
         possession={possession}
         isConnected={isConnected}
         isRejoining={isRejoining}
@@ -524,11 +758,16 @@ export default function GameScreen() {
                 isPhone={isPhone}
                 isCompactDesktop={isCompactDesktop}
                 transientNotice={gameplayNotice}
-                showDesktopRail={isDesktopRail}
+                playToast={playToast}
+                showDesktopRail={isDesktopRail && !fieldFocusMode}
                 hand={displayedHand}
                 specialActions={specialActionItems}
-                onPlayCard={playCard}
-                railDisabled={!isMyTurn || isGameOver || isRejoining}
+                onPlayCard={confirmAndPlayCard}
+                railDisabled={railDisabled}
+                railDisabledReason={railDisabledReason}
+                recommendedCardId={recommendedCardId}
+                fieldFocusMode={fieldFocusMode}
+                onToggleFieldFocus={() => setFieldFocusMode((current) => !current)}
               />
             )}
           </View>
@@ -563,14 +802,33 @@ export default function GameScreen() {
         </ScrollView>
       </View>
 
-      {gameState && !isDesktopRail && (
+      {gameState && !isDesktopRail && !fieldFocusMode && (
         <PlayerHand
           hand={displayedHand}
-          onPlayCard={playCard}
+          onPlayCard={confirmAndPlayCard}
           specialActions={specialActionItems}
           bottomInset={tabBarHeight}
-          disabled={!isMyTurn || isGameOver || isRejoining}
+          disabled={railDisabled}
+          disabledReason={railDisabledReason}
+          recommendedCardId={recommendedCardId}
         />
+      )}
+
+      {pendingConfirm && (
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Confirm Action</Text>
+            <Text style={styles.confirmBody}>Use {pendingConfirm.label}? This can shift field position, time, or possession.</Text>
+            <View style={styles.confirmRow}>
+              <TouchableOpacity style={styles.confirmCancel} onPress={closeConfirm}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmAccept} onPress={commitConfirm}>
+                <Text style={styles.confirmAcceptText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -739,6 +997,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     rowGap: 6,
   },
+  topRowLeftCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   modeBadge: {
     color: '#1f1600',
     backgroundColor: '#f1c40f',
@@ -749,6 +1012,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     overflow: 'hidden',
+  },
+  focusToggle: {
+    backgroundColor: '#243447',
+    borderColor: '#5f7898',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  focusToggleText: {
+    color: '#dce9fb',
+    fontSize: 11,
+    fontWeight: '800',
   },
   roomBadge: {
     color: '#d3efd4',
@@ -774,6 +1050,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  playToast: {
+    width: '100%',
+    maxWidth: 1120,
+    alignSelf: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7d9ab8',
+    backgroundColor: 'rgba(29, 46, 66, 0.93)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  playToastText: {
+    color: '#d9ebff',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   desktopArena: {
     width: '100%',
     maxWidth: 1320,
@@ -789,6 +1082,9 @@ const styles = StyleSheet.create({
   desktopMainColumnActive: {
     flex: 1,
     minWidth: 0,
+  },
+  desktopMainColumnFocused: {
+    maxWidth: 1320,
   },
   desktopRailColumn: {
     width: 360,
@@ -814,6 +1110,10 @@ const styles = StyleSheet.create({
   fieldFrameCompact: {
     paddingVertical: 6,
     paddingHorizontal: 8,
+  },
+  fieldFrameFocus: {
+    borderColor: 'rgba(149, 219, 164, 0.68)',
+    borderWidth: 2,
   },
   playContextPanel: {
     width: '100%',
@@ -914,5 +1214,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 4,
+  },
+  confirmBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#1b2230',
+    borderColor: '#4c5c73',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+  },
+  confirmTitle: {
+    color: '#f7fbff',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  confirmBody: {
+    color: '#d6e2f0',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  confirmCancel: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#68788f',
+    backgroundColor: '#2a3344',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  confirmCancelText: {
+    color: '#d5e0ef',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  confirmAccept: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d3aa3b',
+    backgroundColor: '#f4c83b',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  confirmAcceptText: {
+    color: '#291f00',
+    fontWeight: '900',
+    fontSize: 13,
   },
 });
