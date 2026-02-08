@@ -59,7 +59,7 @@ export class GameEngine {
 
   public startGame() {
     // Skip coin toss for now, just go straight to gameplay
-    this.state.phase = GamePhase.OFFENSE_SELECT;
+    this.state.phase = this.getSelectionPhase();
     this.syncState();
   }
 
@@ -127,7 +127,20 @@ export class GameEngine {
     this.syncState();
     
     this.state.pendingMove = {};
-    this.state.phase = GamePhase.RESOLUTION; 
+    this.state.phase = GamePhase.RESOLUTION;
+  }
+
+  public prepareNextTurn() {
+    if (this.state.phase !== GamePhase.RESOLUTION) {
+      return;
+    }
+
+    this.state.phase = this.getSelectionPhase();
+  }
+
+  private getSelectionPhase(): GamePhase {
+    // Placeholder for future possession-aware phase handling.
+    return GamePhase.OFFENSE_SELECT;
   }
 
   private calculateDelta(offType: string, defType: string): number {

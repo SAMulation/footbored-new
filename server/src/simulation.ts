@@ -1,10 +1,11 @@
 // server/src/simulation.ts
-import { io } from "socket.io-client";
+const socketIoClient: any = require('socket.io-client');
+export {};
 
 // 1. Connect two imaginary players to your local server
-const URL = "http://localhost:3000";
-const playerHome = io(URL);
-const playerAway = io(URL);
+const SERVER_URL = 'http://localhost:3000';
+const playerHome = socketIoClient(SERVER_URL);
+const playerAway = socketIoClient(SERVER_URL);
 
 console.log("🤖 SIMULATION STARTING...");
 
@@ -33,7 +34,7 @@ playerHome.on("connect", () => {
   playerHome.emit("JOIN_GAME", "TEST_ROOM");
 });
 
-playerHome.on("GAME_STATE_UPDATE", (state) => {
+playerHome.on("GAME_STATE_UPDATE", (state: any) => {
   log("HOME", state);
 
   // Auto-Play Logic: If it's my turn, play the first card in my hand
@@ -59,7 +60,7 @@ playerAway.on("connect", () => {
   playerAway.emit("JOIN_GAME", "TEST_ROOM");
 });
 
-playerAway.on("GAME_STATE_UPDATE", (state) => {
+playerAway.on("GAME_STATE_UPDATE", (state: any) => {
   log("AWAY", state);
 
   if (state.phase === "OFFENSE_SELECT" || state.phase === "DEFENSE_SELECT") {

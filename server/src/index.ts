@@ -6,7 +6,7 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid'; // For generating Room IDs
 
 // Import our "Brain" and our "Contract"
-import { GameEngine } from './Engine';
+import { GameEngine } from './engine';
 import { GamePhase, ClientGameState } from '../../shared/types';
 
 // Standard Server Setup
@@ -37,6 +37,10 @@ function getSanitizedState(game: GameEngine, playerId: string): ClientGameState 
   const isHome = state.players.home.id === playerId;
   const myState = isHome ? state.players.home : state.players.away;
   const oppState = isHome ? state.players.away : state.players.home;
+  const isHomeOffense = state.field.possessionPlayerId === 'home';
+  const myPendingMove = isHome
+    ? (isHomeOffense ? state.pendingMove.offenseCardId : state.pendingMove.defenseCardId)
+    : (isHomeOffense ? state.pendingMove.defenseCardId : state.pendingMove.offenseCardId);
 
   return {
     phase: state.phase,
@@ -57,8 +61,7 @@ function getSanitizedState(game: GameEngine, playerId: string): ClientGameState 
     },
     
     // UI Helper
-    waitingForOpponent: (isHome && !!state.pendingMove.offenseCardId) || 
-                        (!isHome && !!state.pendingMove.defenseCardId)
+    waitingForOpponent: !!myPendingMove
   };
 }
 
@@ -114,13 +117,20 @@ io.on('connection', (socket: Socket) => {
   socket.on('PLAY_CARD', ({ roomId, cardId }) => {
     const game = games.get(roomId);
     if (!game) return;
+    if (!cardId) return;
+    if (game.state.phase !== GamePhase.OFFENSE_SELECT && game.state.phase !== GamePhase.DEFENSE_SELECT) {
+      return;
+    }
 
     // 1. Determine who played
     const isHome = game.state.players.home.id === socket.id;
+    const isAway = game.state.players.away.id === socket.id;
+    if (!isHome && !isAway) return;
+    const isHomeOffense = game.state.field.possessionPlayerId === 'home';
     
     // 2. Store the move in "Pending"
     // The Engine logic sits waiting for both slots to be filled
-    if (isHome) {
+    if ((isHome && isHomeOffense) || (isAway && !isHomeOffense)) {
       game.state.pendingMove.offenseCardId = cardId;
     } else {
       game.state.pendingMove.defenseCardId = cardId;
@@ -139,6 +149,11 @@ io.on('connection', (socket: Socket) => {
       const homeId = game.state.players.home.id;
       const awayId = game.state.players.away.id;
       
+      io.to(homeId).emit('GAME_STATE_UPDATE', getSanitizedState(game, homeId));
+      io.to(awayId).emit('GAME_STATE_UPDATE', getSanitizedState(game, awayId));
+
+      // Move back into a playable selection phase for the next down.
+      game.prepareNextTurn();
       io.to(homeId).emit('GAME_STATE_UPDATE', getSanitizedState(game, homeId));
       io.to(awayId).emit('GAME_STATE_UPDATE', getSanitizedState(game, awayId));
       

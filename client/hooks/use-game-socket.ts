@@ -1,20 +1,28 @@
-// client/hooks/useGameSocket.ts
+// client/hooks/use-game-socket.ts
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { ClientGameState } from '../../shared/types'; // Import from our Monorepo Shared folder!
+import { Platform } from 'react-native';
+import { ClientGameState } from '../../shared/types'; 
 
-// ⚠️ REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP ADDRESS!
-// You can find this by running `ipconfig` (Windows) or `ifconfig` (Mac)
-// Example: 'http://192.168.1.15:3000'
-const SERVER_URL = '192.168.0.12:3000'; 
+const LOCAL_IP = '192.168.0.12';
+const PORT = '3000';
+const ENV_SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
+
+const DEFAULT_SERVER_URL = Platform.OS === 'web' 
+  ? `http://localhost:${PORT}`
+  : `http://${LOCAL_IP}:${PORT}`;
+
+const SERVER_URL = (ENV_SERVER_URL || DEFAULT_SERVER_URL).replace(/\/$/, '');
 
 export const useGameSocket = () => {
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     // 1. Initialize Connection
+    console.log('🔗 Connecting to:', SERVER_URL);
     socketRef.current = io(SERVER_URL, {
       transports: ['websocket'], // Force WebSocket to avoid polling issues
     });
@@ -47,16 +55,15 @@ export const useGameSocket = () => {
 
   const joinGame = (roomId: string = 'TEST_ROOM') => {
     if (socketRef.current) {
-      socketRef.current.emit('JOIN_GAME', roomId);
+      const resolvedRoomId = roomId || 'TEST_ROOM';
+      setRoomId(resolvedRoomId);
+      socketRef.current.emit('JOIN_GAME', resolvedRoomId);
     }
   };
 
   const playCard = (cardId: string) => {
-    if (socketRef.current && gameState) {
-      // We need the RoomID (which currently lives in the Server state, not explicitly sent to client logic often)
-      // For this simplified version, we assume 'TEST_ROOM' or we store roomId in client state.
-      // Let's assume we hardcode 'TEST_ROOM' for Hour 4 verification.
-      socketRef.current.emit('PLAY_CARD', { roomId: 'TEST_ROOM', cardId });
+    if (socketRef.current && gameState && roomId) {
+      socketRef.current.emit('PLAY_CARD', { roomId, cardId });
     }
   };
 
