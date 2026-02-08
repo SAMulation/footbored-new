@@ -3,6 +3,22 @@ export interface DistanceBand {
   successRate: number;
 }
 
+type PlayQuality = 'B' | 'G' | 'D' | 'O' | 'W';
+type TrickPlayOutcomeCode =
+  | 'LR_PLUS_5'
+  | 'LP_PLUS_5'
+  | 'X4_GAIN'
+  | 'NEG_X3'
+  | 'OWN_PENALTY_15'
+  | 'OFFENSE_BIG_PLAY';
+type HailMaryOutcomeCode =
+  | 'ZERO_GAIN'
+  | 'GAIN_20'
+  | 'GAIN_40'
+  | 'TOUCHDOWN'
+  | 'SACK_MINUS_10'
+  | 'INTERCEPTION_AT_SPOT';
+
 export interface RuleAssumptions {
   readonly version: string;
   readonly kickoff: {
@@ -38,6 +54,27 @@ export interface RuleAssumptions {
     readonly mandatoryTwoPointStartPeriod: number;
     readonly shootoutStartPeriod: number;
   };
+  readonly balance: {
+    readonly standardPlay: {
+      readonly qualityYardOffsets: Readonly<Record<PlayQuality, number>>;
+    };
+    readonly trickPlay: {
+      readonly outcomeWeights: Readonly<Record<TrickPlayOutcomeCode, number>>;
+    };
+    readonly hailMary: {
+      readonly outcomeWeights: Readonly<Record<HailMaryOutcomeCode, number>>;
+    };
+    readonly botDecision: {
+      readonly fourthDownFieldGoalMinBallOn: number;
+      readonly fourthDownFieldGoalMaxToGo: number;
+      readonly fourthDownPuntMinBallOn: number;
+      readonly hailMaryToGoThreshold: number;
+      readonly trickPlayToGoThreshold: number;
+      readonly defenseIcingMinBallOn: number;
+      readonly lateGameTwoPointDeficit: number;
+      readonly lateGameQuarterThreshold: number;
+    };
+  };
 }
 
 const FIELD_GOAL_DISTANCE_BANDS: readonly DistanceBand[] = Object.freeze([
@@ -48,7 +85,7 @@ const FIELD_GOAL_DISTANCE_BANDS: readonly DistanceBand[] = Object.freeze([
 ]);
 
 export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
-  version: '2026-02-08-conversion-ot-bucket-v1',
+  version: '2026-02-08-balance-ux-polish-v1',
   kickoff: Object.freeze({
     touchbackRate: 0.34,
     touchbackSpot: 25,
@@ -81,5 +118,43 @@ export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
     timeoutsPerBucket: 1,
     mandatoryTwoPointStartPeriod: 3,
     shootoutStartPeriod: 5,
+  }),
+  balance: Object.freeze({
+    standardPlay: Object.freeze({
+      // Neutral by default: no quality-based yard offset unless explicitly tuned.
+      qualityYardOffsets: Object.freeze({ B: 0, G: 0, D: 0, O: 0, W: 0 }),
+    }),
+    trickPlay: Object.freeze({
+      // Neutral by default: all outcomes remain uniformly weighted.
+      outcomeWeights: Object.freeze({
+        LR_PLUS_5: 1,
+        LP_PLUS_5: 1,
+        X4_GAIN: 1,
+        NEG_X3: 1,
+        OWN_PENALTY_15: 1,
+        OFFENSE_BIG_PLAY: 1,
+      }),
+    }),
+    hailMary: Object.freeze({
+      // Neutral by default: all outcomes remain uniformly weighted.
+      outcomeWeights: Object.freeze({
+        ZERO_GAIN: 1,
+        GAIN_20: 1,
+        GAIN_40: 1,
+        TOUCHDOWN: 1,
+        SACK_MINUS_10: 1,
+        INTERCEPTION_AT_SPOT: 1,
+      }),
+    }),
+    botDecision: Object.freeze({
+      fourthDownFieldGoalMinBallOn: 60,
+      fourthDownFieldGoalMaxToGo: 8,
+      fourthDownPuntMinBallOn: 25,
+      hailMaryToGoThreshold: 14,
+      trickPlayToGoThreshold: 8,
+      defenseIcingMinBallOn: 55,
+      lateGameTwoPointDeficit: 2,
+      lateGameQuarterThreshold: 4,
+    }),
   }),
 });

@@ -6,6 +6,7 @@ import cors from 'cors';
 
 import { ClientGameState, GamePhase, JoinGameAck, JoinGamePayload, PlayType } from '../../shared/types';
 import { GameEngine, TeamSide } from './engine';
+import { RULE_ASSUMPTIONS } from './rules/assumptions';
 
 export const REJOIN_TTL_MS = 10 * 60 * 1000;
 
@@ -27,6 +28,22 @@ interface RoomContext {
   botEnabled: boolean;
   botSeat: Seat | null;
   botDifficulty: BotDifficulty;
+}
+
+interface BotSpecialDecisionContext {
+  difficulty: BotDifficulty;
+  phase: GamePhase;
+  isOffense: boolean;
+  field: {
+    down: number;
+    toGo: number;
+    ballOn: number;
+    quarter: number;
+    isOvertime: boolean;
+  };
+  conversionMandatoryTwoPoint: boolean;
+  scoreDeficit: number;
+  hasSpecial: (type: PlayType) => boolean;
 }
 
 function getSanitizedState(game: GameEngine, playerId: string): ClientGameState {
@@ -130,6 +147,64 @@ function isSelectablePhase(phase: GamePhase): boolean {
     || phase === GamePhase.CONVERSION_DEFENSE_SELECT;
 }
 
+export function chooseBotSpecialType(context: BotSpecialDecisionContext): PlayType | null {
+  const {
+    difficulty,
+    phase,
+    isOffense,
+    field,
+    conversionMandatoryTwoPoint,
+    scoreDeficit,
+    hasSpecial,
+  } = context;
+
+  if (phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    const isLateGame = field.isOvertime || field.quarter >= RULE_ASSUMPTIONS.balance.botDecision.lateGameQuarterThreshold;
+    const preferTwoPoint = isLateGame && scoreDeficit >= RULE_ASSUMPTIONS.balance.botDecision.lateGameTwoPointDeficit;
+    if (conversionMandatoryTwoPoint || preferTwoPoint) {
+      return hasSpecial('2PT') ? '2PT' : hasSpecial('XP') ? 'XP' : null;
+    }
+    return hasSpecial('XP') ? 'XP' : hasSpecial('2PT') ? '2PT' : null;
+  }
+
+  if (difficulty === 'easy') {
+    return hasSpecial('TP') ? 'TP' : hasSpecial('TO') ? 'TO' : null;
+  }
+
+  if (isOffense) {
+    if (field.down === 4) {
+      const shouldAttemptFieldGoal = field.ballOn >= RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMinBallOn
+        && field.toGo <= RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMaxToGo;
+      const shouldPunt = field.ballOn >= RULE_ASSUMPTIONS.balance.botDecision.fourthDownPuntMinBallOn;
+      if (shouldAttemptFieldGoal && hasSpecial('FG')) {
+        return 'FG';
+      }
+      if (shouldPunt && hasSpecial('PT')) {
+        return 'PT';
+      }
+    }
+
+    if (field.toGo >= RULE_ASSUMPTIONS.balance.botDecision.hailMaryToGoThreshold && hasSpecial('HM')) {
+      return 'HM';
+    }
+
+    if (field.toGo >= RULE_ASSUMPTIONS.balance.botDecision.trickPlayToGoThreshold && hasSpecial('TP')) {
+      return 'TP';
+    }
+    return null;
+  }
+
+  if (field.down === 4 && field.ballOn >= RULE_ASSUMPTIONS.balance.botDecision.defenseIcingMinBallOn && hasSpecial('TO')) {
+    return 'TO';
+  }
+
+  if (field.toGo >= RULE_ASSUMPTIONS.balance.botDecision.trickPlayToGoThreshold && hasSpecial('TP')) {
+    return 'TP';
+  }
+
+  return null;
+}
+
 function chooseBotCard(room: RoomContext): string | null {
   if (!room.botSeat) {
     return null;
@@ -144,59 +219,31 @@ function chooseBotCard(room: RoomContext): string | null {
     return player.specialActions.find((action) => action.type === type && action.enabled)?.id ?? null;
   };
 
-  if (room.game.state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
-    if (!isOffense) {
-      return null;
-    }
-    const mandatoryTwoPoint = room.game.state.conversion?.mandatoryTwoPoint ?? false;
-    const xp = specialId('XP');
-    const twoPoint = specialId('2PT');
-    if (mandatoryTwoPoint) {
-      return twoPoint ?? xp;
-    }
-    return xp ?? twoPoint;
+  const botScore = room.botSeat === 'home' ? room.game.state.players.home.score : room.game.state.players.away.score;
+  const oppScore = room.botSeat === 'home' ? room.game.state.players.away.score : room.game.state.players.home.score;
+  const preferredSpecial = chooseBotSpecialType({
+    difficulty: room.botDifficulty,
+    phase: room.game.state.phase,
+    isOffense,
+    field: {
+      down: room.game.state.field.down,
+      toGo: room.game.state.field.toGo,
+      ballOn: room.game.state.field.ballOn,
+      quarter: room.game.state.field.quarter,
+      isOvertime: room.game.state.field.isOvertime,
+    },
+    conversionMandatoryTwoPoint: room.game.state.conversion?.mandatoryTwoPoint ?? false,
+    scoreDeficit: oppScore - botScore,
+    hasSpecial: (type) => !!specialId(type),
+  });
+
+  if (room.botDifficulty === 'easy' && preferredSpecial) {
+    return specialId(preferredSpecial);
   }
-
-  if (room.botDifficulty === 'easy') {
-    return hand[0]?.id ?? specialId('TP') ?? specialId('TO');
-  }
-
-  if (isOffense) {
-    const { down, toGo, ballOn } = room.game.state.field;
-
-    if (down === 4) {
-      const fg = specialId('FG');
-      const pt = specialId('PT');
-      if (fg && ballOn >= 60) {
-        return fg;
-      }
-      if (pt) {
-        return pt;
-      }
-    }
-
-    if (toGo >= 14) {
-      const hm = specialId('HM');
-      if (hm) {
-        return hm;
-      }
-    }
-
-    if (toGo >= 8) {
-      const tp = specialId('TP');
-      if (tp) {
-        return tp;
-      }
-    }
-  } else {
-    const to = specialId('TO');
-    if (to && room.game.state.field.down === 4 && room.game.state.field.ballOn >= 55) {
-      return to;
-    }
-
-    const tp = specialId('TP');
-    if (tp && room.game.state.field.toGo >= 8) {
-      return tp;
+  if (preferredSpecial) {
+    const specialCardId = specialId(preferredSpecial);
+    if (specialCardId) {
+      return specialCardId;
     }
   }
 

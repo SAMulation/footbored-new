@@ -373,6 +373,11 @@ export class GameEngine {
       ? this.tickGameClock(combinedFlags)
       : false;
 
+    const baseMessage = shootoutConverted
+      ? `${outcome.message} Two-point conversion good.`
+      : outcome.message;
+    const finalMessage = this.appendReasonTags(baseMessage, combinedFlags);
+
     this.state.lastPlay = {
       playCalled: offenseCard,
       defenseCalled: defenseCard,
@@ -383,9 +388,7 @@ export class GameEngine {
       isSafety: ballResolution.safety,
       multiplierCard: outcome.multiplierCard ?? 'N/A',
       yardCard: outcome.yardCard ?? Math.abs(outcome.yards),
-      message: shootoutConverted
-        ? `${outcome.message} Two-point conversion good.`
-        : outcome.message,
+      message: finalMessage,
       flags: {
         defPenalty: combinedFlags.defPenalty,
         zeroSecondPlay,
@@ -505,6 +508,15 @@ export class GameEngine {
       this.state.players[conversion.offenseSide].score += EXTRA_POINT_POINTS;
     }
 
+    const flags: MatchupFlags = {
+      conversionType: 'XP',
+      conversionSuccess: success,
+      mandatoryTwoPoint: conversion.mandatoryTwoPoint,
+      otBucketReset: this.consumeOtBucketResetFlag(),
+    };
+    const baseMessage = success ? 'Extra point is good.' : 'Extra point is no good.';
+    const finalMessage = this.appendReasonTags(baseMessage, flags);
+
     this.state.lastPlay = {
       playCalled: {
         id: this.buildSpecialCardId(conversion.offenseSide, 'XP'),
@@ -525,13 +537,8 @@ export class GameEngine {
       isSafety: false,
       multiplierCard: 'XP',
       yardCard: 0,
-      message: success ? 'Extra point is good.' : 'Extra point is no good.',
-      flags: {
-        conversionType: 'XP',
-        conversionSuccess: success,
-        mandatoryTwoPoint: conversion.mandatoryTwoPoint,
-        otBucketReset: this.consumeOtBucketResetFlag(),
-      },
+      message: finalMessage,
+      flags,
     };
 
     this.state.pendingMove = {};
@@ -580,6 +587,17 @@ export class GameEngine {
       this.state.players[offenseSide].score += TWO_POINT_POINTS;
     }
 
+    const flags: MatchupFlags = {
+      conversionType: '2PT',
+      conversionSuccess: success,
+      mandatoryTwoPoint: conversion.mandatoryTwoPoint,
+      otBucketReset: this.consumeOtBucketResetFlag(),
+    };
+    const baseMessage = success
+      ? `Two-point attempt good. ${outcome.message}`
+      : `Two-point attempt failed (need ${RULE_ASSUMPTIONS.conversion.twoPointRequiredYards}y). ${outcome.message}`;
+    const finalMessage = this.appendReasonTags(baseMessage, flags);
+
     this.state.lastPlay = {
       playCalled: offenseCard,
       defenseCalled: defenseCard,
@@ -590,15 +608,8 @@ export class GameEngine {
       isSafety: false,
       multiplierCard: outcome.multiplierCard ?? '2PT',
       yardCard: outcome.yardCard ?? Math.abs(outcome.yards),
-      message: success
-        ? `Two-point attempt good. ${outcome.message}`
-        : `Two-point attempt failed. ${outcome.message}`,
-      flags: {
-        conversionType: '2PT',
-        conversionSuccess: success,
-        mandatoryTwoPoint: conversion.mandatoryTwoPoint,
-        otBucketReset: this.consumeOtBucketResetFlag(),
-      },
+      message: finalMessage,
+      flags,
     };
 
     offenseHand.refill(this.getDeckForSide(offenseSide));
@@ -854,7 +865,7 @@ export class GameEngine {
       return {
         delta: 0,
         yards: 0,
-        message: 'Timeout called. No play run.',
+        message: 'Timeout called. No play run (clock stopped).',
         keepOffenseCard: true,
         keepDefenseCard: true,
         noDownProgress: true,
@@ -869,7 +880,7 @@ export class GameEngine {
       return {
         delta: 0,
         yards: 0,
-        message: 'Defense timeout called. No play run.',
+        message: 'Defense timeout called. No play run (clock stopped).',
         keepOffenseCard: true,
         keepDefenseCard: true,
         noDownProgress: true,
@@ -1037,12 +1048,13 @@ export class GameEngine {
     const multiplierCard = MULTIPLIER_SEQUENCE[hashToIndex(`${seed}|mult`, MULTIPLIER_SEQUENCE.length)];
     const multiplier = MULTIPLIER_TABLE[multiplierCard][quality];
     const yardCard = YARD_CARD_SEQUENCE[hashToIndex(`${seed}|yard`, YARD_CARD_SEQUENCE.length)];
-    const baseYards = roundAwayFromZero(yardCard * multiplier);
+    const qualityOffset = Math.trunc(RULE_ASSUMPTIONS.balance.standardPlay.qualityYardOffsets[quality] ?? 0);
+    const baseYards = roundAwayFromZero(yardCard * multiplier) + qualityOffset;
 
     const result: MatchupResult = {
       delta: QUALITY_DELTA[quality],
       yards: baseYards,
-      message: `${offense} vs ${defense} -> ${quality} (${multiplierCard}) for ${baseYards >= 0 ? '+' : ''}${baseYards} yards.`,
+      message: `${offense} vs ${defense} -> quality ${quality}; multiplier ${multiplierCard} (${multiplier}); yard card ${yardCard}; result ${baseYards >= 0 ? '+' : ''}${baseYards} yards.`,
       multiplierCard,
       yardCard,
     };
@@ -1180,7 +1192,11 @@ export class GameEngine {
   }
 
   private resolveTrickPlay(seed: string): MatchupResult {
-    const outcome = TRICK_PLAY_OUTCOME_TABLE[hashToIndex(`${seed}|tp`, TRICK_PLAY_OUTCOME_TABLE.length)];
+    const outcome = this.selectWeightedOutcome(
+      TRICK_PLAY_OUTCOME_TABLE,
+      RULE_ASSUMPTIONS.balance.trickPlay.outcomeWeights,
+      `${seed}|tp`
+    );
     return this.resolveTrickOutcome(outcome);
   }
 
@@ -1245,8 +1261,40 @@ export class GameEngine {
   }
 
   private resolveHailMary(seed: string): MatchupResult {
-    const outcome = HAIL_MARY_OUTCOME_TABLE[hashToIndex(`${seed}|hm`, HAIL_MARY_OUTCOME_TABLE.length)];
+    const outcome = this.selectWeightedOutcome(
+      HAIL_MARY_OUTCOME_TABLE,
+      RULE_ASSUMPTIONS.balance.hailMary.outcomeWeights,
+      `${seed}|hm`
+    );
     return this.resolveHailMaryOutcome(outcome);
+  }
+
+  private selectWeightedOutcome<T extends string>(
+    outcomes: readonly T[],
+    weights: Readonly<Record<T, number>>,
+    seed: string
+  ): T {
+    const weighted = outcomes.map((outcome) => {
+      const raw = weights[outcome];
+      const normalized = Number.isFinite(raw) ? raw : 1;
+      const scaled = Math.max(0, Math.round(normalized * 1000));
+      return { outcome, weight: scaled };
+    });
+
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+    if (totalWeight <= 0) {
+      return outcomes[hashToIndex(`${seed}|fallback`, outcomes.length)]!;
+    }
+
+    let ticket = hashToIndex(`${seed}|weighted`, totalWeight);
+    for (const item of weighted) {
+      ticket -= item.weight;
+      if (ticket < 0) {
+        return item.outcome;
+      }
+    }
+
+    return outcomes[outcomes.length - 1]!;
   }
 
   private resolveHailMaryOutcome(outcome: HailMaryOutcomeCode): MatchupResult {
@@ -1633,6 +1681,34 @@ export class GameEngine {
     }
     this.pendingOtBucketReset = false;
     return true;
+  }
+
+  private appendReasonTags(message: string, flags?: MatchupFlags): string {
+    if (!flags) {
+      return message;
+    }
+
+    const tags: string[] = [];
+    if (flags.icedKicker) {
+      tags.push('iced kicker');
+    }
+    if (flags.kickoffTouchback) {
+      tags.push('touchback');
+    }
+    if (flags.otBucketReset) {
+      tags.push('ot bucket reset');
+    }
+    if (flags.mandatoryTwoPoint) {
+      tags.push('mandatory 2pt');
+    }
+    if (flags.conversionType) {
+      tags.push(`conversion ${flags.conversionType}`);
+    }
+
+    if (tags.length === 0) {
+      return message;
+    }
+    return `${message} [${tags.join('; ')}]`;
   }
 
   private flipPossession() {
