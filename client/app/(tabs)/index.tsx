@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
@@ -212,7 +213,7 @@ function InGameShell({
 
   return (
     <View style={[styles.inGameShell, isCompactDesktop && styles.inGameShellCompact]}>
-      <View style={styles.inGameTopRow}>
+      <View style={[styles.inGameTopRow, isCompactDesktop && styles.inGameTopRowCompact]}>
         {matchMode === 'BOT' ? <Text style={styles.modeBadge}>BOT MATCH</Text> : <View />}
         <Text style={styles.roomBadge}>ROOM: {roomId ?? 'N/A'}</Text>
       </View>
@@ -256,6 +257,7 @@ function GameOverShell({ homeScore, awayScore, winner, onPlayAgain, isPhone }: G
 
 export default function GameScreen() {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const tabBarHeight = useBottomTabBarHeight();
   const isPhone = viewportWidth < 620;
   const isCompactDesktop = viewportWidth < 1280;
   const isShortSurface = viewportHeight < 760;
@@ -491,6 +493,7 @@ export default function GameScreen() {
           hand={displayedHand}
           onPlayCard={playCard}
           specialActions={specialActionItems}
+          bottomInset={tabBarHeight}
           disabled={!isMyTurn || isGameOver || isRejoining}
         />
       )}
@@ -653,6 +656,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  inGameTopRowCompact: {
+    flexWrap: 'wrap',
+    rowGap: 6,
+  },
   modeBadge: {
     color: '#1f1600',
     backgroundColor: '#f1c40f',
@@ -669,6 +676,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 12,
     letterSpacing: 0.5,
+    flexShrink: 1,
+    textAlign: 'right',
   },
   fieldFrame: {
     width: '100%',

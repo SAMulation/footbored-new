@@ -15,9 +15,10 @@ interface PlayerHandProps {
   onPlayCard: (cardId: string) => void;
   specialActions?: SpecialActionItem[];
   disabled?: boolean;
+  bottomInset?: number;
 }
 
-export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled }: PlayerHandProps) {
+export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bottomInset = 0 }: PlayerHandProps) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const railHeight = useMemo(() => {
     let baseHeight = 194;
@@ -38,7 +39,15 @@ export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled }: 
   const isPhone = viewportWidth < 520;
 
   return (
-    <View style={[styles.container, { height: railHeight }, disabled && styles.containerDisabled]}>
+    <View
+      style={[
+        styles.container,
+        {
+          height: railHeight,
+          paddingBottom: Math.max(12, Math.round(bottomInset) + 8),
+        },
+        disabled && styles.containerDisabled,
+      ]}>
       <View style={styles.headerRow}>
         <Text style={[styles.label, isPhone && styles.labelPhone]}>Play Command Rail</Text>
         <Text style={[styles.subLabel, isPhone && styles.subLabelPhone]}>{disabled ? 'Awaiting turn' : 'Pick your play'}</Text>
@@ -104,7 +113,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: '#3a404a',
     paddingTop: 10,
-    paddingBottom: 12,
     gap: 10,
   },
   containerDisabled: {
