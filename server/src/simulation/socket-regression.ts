@@ -30,6 +30,11 @@ interface ClientState {
   lastPlay?: {
     message: string;
     yardsGained: number;
+    flags?: {
+      conversionType?: 'XP' | '2PT';
+      conversionSuccess?: boolean;
+      kickType?: 'KICKOFF' | 'PUNT' | 'FIELD_GOAL';
+    };
   };
 }
 
@@ -79,6 +84,8 @@ function isValidTransition(prev: string | null, next: string): boolean {
     `${GamePhase.LOBBY}->${GamePhase.OFFENSE_SELECT}`,
     `${GamePhase.OFFENSE_SELECT}->${GamePhase.RESOLUTION}`,
     `${GamePhase.DEFENSE_SELECT}->${GamePhase.RESOLUTION}`,
+    `${GamePhase.OFFENSE_SELECT}->${GamePhase.CONVERSION_OFFENSE_SELECT}`,
+    `${GamePhase.DEFENSE_SELECT}->${GamePhase.CONVERSION_OFFENSE_SELECT}`,
     `${GamePhase.RESOLUTION}->${GamePhase.OFFENSE_SELECT}`,
     `${GamePhase.RESOLUTION}->${GamePhase.DEFENSE_SELECT}`,
     `${GamePhase.RESOLUTION}->${GamePhase.CONVERSION_OFFENSE_SELECT}`,
@@ -135,6 +142,8 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
   const away = await connectClient(url);
   let homeState: ClientState | null = null;
   let awayState: ClientState | null = null;
+  const readHomeState = (): ClientState | null => homeState;
+  const readAwayState = (): ClientState | null => awayState;
   let prevHomePhase: string | null = null;
   let prevAwayPhase: string | null = null;
 
@@ -143,8 +152,6 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
   const submittedTurnKey = new Map<string, string>([['home', ''], ['away', '']]);
   let homeReachedGameOver = false;
   let awayReachedGameOver = false;
-  const readHomeState = (): ClientState | null => homeState;
-  const readAwayState = (): ClientState | null => awayState;
 
   const handleState = (label: 'home' | 'away', state: ClientState) => {
     assert(state.field.ballOn >= 0 && state.field.ballOn <= 100, 'ballOn out of range');
@@ -166,6 +173,7 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
         resolutions += 1;
       }
     }
+
     if (state.phase === GamePhase.GAME_OVER) {
       if (label === 'home') homeReachedGameOver = true;
       if (label === 'away') awayReachedGameOver = true;
@@ -198,7 +206,7 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
     while (Date.now() - start < 20000) {
       const currentHomeState = readHomeState();
       if (currentHomeState && isSelectablePhase(currentHomeState.phase) && !currentHomeState.waitingForOpponent) {
-        const turnKey = `${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
+        const turnKey = `${currentHomeState.phase}:${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
         if (submittedTurnKey.get('home') !== turnKey) {
           const cardId = chooseCard(currentHomeState);
           if (cardId) {
@@ -210,7 +218,7 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
 
       const currentAwayState = readAwayState();
       if (currentAwayState && isSelectablePhase(currentAwayState.phase) && !currentAwayState.waitingForOpponent) {
-        const turnKey = `${currentAwayState.field.quarter}:${currentAwayState.field.clockSeconds}:${currentAwayState.field.down}:${currentAwayState.field.toGo}:${currentAwayState.field.ballOn}`;
+        const turnKey = `${currentAwayState.phase}:${currentAwayState.field.quarter}:${currentAwayState.field.clockSeconds}:${currentAwayState.field.down}:${currentAwayState.field.toGo}:${currentAwayState.field.ballOn}`;
         if (submittedTurnKey.get('away') !== turnKey) {
           const cardId = chooseCard(currentAwayState);
           if (cardId) {
@@ -228,6 +236,110 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
     }
 
     throw new Error('Two-player full-game scenario timed out');
+  } finally {
+    home.disconnect();
+    away.disconnect();
+  }
+}
+
+async function runConversionAndFlagScenario(url: string, rooms: Map<string, any>) {
+  const roomId = `CVR${Date.now().toString().slice(-6)}`;
+  const home = await connectClient(url);
+  const away = await connectClient(url);
+  let homeState: ClientState | null = null;
+  let awayState: ClientState | null = null;
+  const readHomeState = (): ClientState | null => homeState;
+  const readAwayState = (): ClientState | null => awayState;
+  const submittedTurnKey = new Map<string, string>([['home', ''], ['away', '']]);
+  let sawConversionPhase = false;
+  let sawConversionFlag = false;
+
+  const handleState = (label: 'home' | 'away', state: ClientState) => {
+    if (label === 'home') {
+      homeState = state;
+    } else {
+      awayState = state;
+    }
+
+    if (state.phase === GamePhase.CONVERSION_OFFENSE_SELECT || state.phase === GamePhase.CONVERSION_DEFENSE_SELECT) {
+      sawConversionPhase = true;
+      const specialTypes = new Set((state.myState.specialActions ?? []).map((action) => action.type));
+      assert(specialTypes.has('XP'), 'conversion phases should surface XP action');
+      assert(specialTypes.has('2PT'), 'conversion phases should surface 2PT action');
+    }
+
+    if (state.lastPlay?.flags?.conversionType) {
+      sawConversionFlag = true;
+      assert(typeof state.lastPlay.flags.conversionSuccess === 'boolean', 'conversion flag should include success boolean');
+    }
+  };
+
+  home.on('GAME_STATE_UPDATE', (state: ClientState) => handleState('home', state));
+  away.on('GAME_STATE_UPDATE', (state: ClientState) => handleState('away', state));
+
+  await emitJoin(home, { roomId, requestedSeat: 'home' });
+  await emitJoin(away, { roomId, requestedSeat: 'away' });
+
+  const room = rooms.get(roomId);
+  assert(room);
+  room.game.state.field.possessionPlayerId = 'home';
+  room.game.state.field.ballOn = 99;
+  room.game.state.field.down = 1;
+  room.game.state.field.toGo = 1;
+  room.game.state.field.quarter = 2;
+  room.game.state.field.clockSeconds = 120;
+  const originalEvaluateMatchup = (room.game as any).evaluateMatchup.bind(room.game);
+  let forceTouchdown = true;
+  (room.game as any).evaluateMatchup = (...args: any[]) => {
+    if (forceTouchdown) {
+      forceTouchdown = false;
+      return {
+        delta: 3,
+        yards: 70,
+        message: 'Regression forced touchdown for conversion coverage.',
+        multiplierCard: 'K',
+        yardCard: 10,
+      };
+    }
+    return originalEvaluateMatchup(...args);
+  };
+  room.game.syncState();
+
+  const start = Date.now();
+  try {
+    while (Date.now() - start < 10000) {
+      const currentHomeState = readHomeState();
+      if (currentHomeState && isSelectablePhase(currentHomeState.phase) && !currentHomeState.waitingForOpponent) {
+        const turnKey = `${currentHomeState.phase}:${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
+        if (submittedTurnKey.get('home') !== turnKey) {
+          const cardId = chooseCard(currentHomeState);
+          if (cardId) {
+            submittedTurnKey.set('home', turnKey);
+            home.emit('PLAY_CARD', { roomId, cardId });
+          }
+        }
+      }
+
+      const currentAwayState = readAwayState();
+      if (currentAwayState && isSelectablePhase(currentAwayState.phase) && !currentAwayState.waitingForOpponent) {
+        const turnKey = `${currentAwayState.phase}:${currentAwayState.field.quarter}:${currentAwayState.field.clockSeconds}:${currentAwayState.field.down}:${currentAwayState.field.toGo}:${currentAwayState.field.ballOn}`;
+        if (submittedTurnKey.get('away') !== turnKey) {
+          const cardId = chooseCard(currentAwayState);
+          if (cardId) {
+            submittedTurnKey.set('away', turnKey);
+            away.emit('PLAY_CARD', { roomId, cardId });
+          }
+        }
+      }
+
+      if (sawConversionPhase && sawConversionFlag) {
+        return;
+      }
+
+      await pause(40);
+    }
+
+    throw new Error('Conversion and flag scenario timed out');
   } finally {
     home.disconnect();
     away.disconnect();
@@ -318,6 +430,7 @@ async function main() {
 
   try {
     await runTwoPlayerFullGameScenario(url, rooms);
+    await runConversionAndFlagScenario(url, rooms);
     await runBotQuickPlayFullGameScenario(url, rooms);
     console.log('Socket regression passed (two-player + bot quick-play full-game completion).');
   } finally {

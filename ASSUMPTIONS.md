@@ -48,3 +48,17 @@ This file is append-only and tracks provisional implementation assumptions used 
 - Rationale: Source material conflicts on OT refresh cadence; bucketed reset keeps parity intent explicit and deterministic until board-era values are fully recovered.
 - Verification: `server/src/__tests__/overtime-clock.test.ts`
 - Status: ACTIVE
+
+### 2026-02-08 - Balance Knobs + Bot Decision Thresholds
+- Rule IDs: `R-BAL-001` (implementation tuning overlay)
+- Decision: Added deterministic, config-driven balance knobs for standard-play quality offsets, TP/HM outcome weights, and bot decision thresholds (4th-down FG/PT, HM/TP usage, icing triggers, and late-game 2PT bias). Defaults are neutral and preserve existing behavior unless explicitly tuned.
+- Rationale: Improve gameplay feel/readability and bot realism without changing canonical rule scope or replacing board-era unknowns.
+- Verification: `server/src/__tests__/assumptions-config.test.ts`, `server/src/__tests__/bot-decision.test.ts`
+- Status: ACTIVE
+
+### 2026-02-08 - Recap Messaging Clarity
+- Rule IDs: `R-DOC-UX-001` (presentation consistency)
+- Decision: Standardized play recap messages to include outcome basis (quality/multiplier/yard-card) and explicit reason tags (`iced kicker`, `touchback`, `mandatory 2pt`, `ot bucket reset`) where applicable.
+- Rationale: Reduce ambiguity in play outcomes and make special constraints visible in both server recaps and client UX.
+- Verification: `server/src/__tests__/play-message-flags.test.ts`, `server/src/simulation/socket-regression.ts`
+- Status: ACTIVE

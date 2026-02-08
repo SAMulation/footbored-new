@@ -51,6 +51,8 @@
     - Deterministic TP/HM outcome-table routing in engine.
     - Interactive post-TD conversion flow (`XP`/`2PT`) with mandatory 2-point enforcement in OT3/OT4.
     - OT resource refresh buckets at `OT1/3/5...` with transparent reset flags.
+    - Deterministic balance knobs with neutral defaults (standard quality offsets, TP/HM outcome weights, bot decision thresholds).
+    - Recap-message clarity pass with explicit special-reason tags and conversion/kick context.
     - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`, `R-CLK-005`, `R-KICK-001`, `R-KICK-002`, `R-OT-003`.
     - Zero-second play window handling and college overtime staging.
   - OPEN (intentionally guarded in code):
@@ -101,7 +103,7 @@
 ## Immediate Next Commit Checklist
 - Replace assumption-backed conversion/kick tables with recovered board-authentic values once artifacts are verified.
 - Add reconnect scenario coverage to socket regression for long-lived rooms.
-- Add conversion-focused UI polish (explicit XP/2PT disabled reasons and recap badges).
+- Add deeper in-app recap timeline/history panel to visualize drive-level context.
 
 ## UX Roadmap Pointer
 - Browser UI/UX execution details are now tracked in `/Users/sam/Downloads/Projects/footbored-new/UX_ROADMAP.md`.

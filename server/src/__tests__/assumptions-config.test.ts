@@ -12,6 +12,11 @@ test('rule assumptions config is loaded and frozen', () => {
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.fieldGoal.distanceBands), true);
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.conversion), true);
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.overtime), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.balance), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.balance.standardPlay), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.balance.trickPlay), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.balance.hailMary), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.balance.botDecision), true);
 });
 
 test('field-goal distance bands are monotonic and bounded', () => {
@@ -51,4 +56,30 @@ test('kick assumptions stay in legal football ranges', () => {
   assert(RULE_ASSUMPTIONS.overtime.hailMaryPerBucket >= 1);
   assert(RULE_ASSUMPTIONS.overtime.timeoutsPerBucket >= 0);
   assert(RULE_ASSUMPTIONS.overtime.mandatoryTwoPointStartPeriod < RULE_ASSUMPTIONS.overtime.shootoutStartPeriod);
+
+  for (const offset of Object.values(RULE_ASSUMPTIONS.balance.standardPlay.qualityYardOffsets)) {
+    assert(Number.isInteger(offset));
+    assert(offset >= -5 && offset <= 5);
+  }
+
+  for (const weight of Object.values(RULE_ASSUMPTIONS.balance.trickPlay.outcomeWeights)) {
+    assert(weight >= 0);
+    assert(Number.isFinite(weight));
+  }
+  for (const weight of Object.values(RULE_ASSUMPTIONS.balance.hailMary.outcomeWeights)) {
+    assert(weight >= 0);
+    assert(Number.isFinite(weight));
+  }
+
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMinBallOn >= 40);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMinBallOn <= 85);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMaxToGo >= 1);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownFieldGoalMaxToGo <= 15);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownPuntMinBallOn >= 1);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.fourthDownPuntMinBallOn <= 60);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.hailMaryToGoThreshold >= 8);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.trickPlayToGoThreshold >= 4);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.defenseIcingMinBallOn >= 35);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.lateGameQuarterThreshold >= 2);
+  assert(RULE_ASSUMPTIONS.balance.botDecision.lateGameTwoPointDeficit >= 1);
 });

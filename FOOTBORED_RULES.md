@@ -435,7 +435,8 @@ Current prototype behavior in `/Users/sam/Downloads/Projects/footbored-new/serve
 1. Kicking (`FG/PT/Kickoff`) and icing are implemented with explicit assumptions, not fully recovered board-era tables.
 2. Standard-card usage remains hand-draw driven in runtime with virtual specials, not yet a strict board inventory-only flow.
 3. Some advanced football detail remains assumption-based or partial: conversion probability tables, half-distance semantics, and board-authentic OT bucket quantities.
-4. Determinism is hash-seeded and replay-safe for multiplayer, but still models inferred procedure where source text is incomplete.
+4. Determinism is hash-seeded and replay-safe for multiplayer, with configurable balance knobs that default to neutral behavior.
+5. Play recap messaging now includes standardized basis and reason tags to surface special constraints without altering canonical rule semantics.
 
 These prototype behaviors MUST be treated as temporary implementation state, not canon.
 
@@ -449,9 +450,11 @@ These prototype behaviors MUST be treated as temporary implementation state, not
 - **2026-02-08:** Closed `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` in code using explicit assumptions tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.
 - **2026-02-08:** Implemented interactive touchdown conversion flow (`R-CONV-001`, `R-CONV-002`) and mandatory 2-point enforcement from OT3 (`R-OT-003`).
 - **2026-02-08:** Switched OT HM/timeout refresh to two-period bucket cadence (`OT1/3/5...`) with explicit assumption tracking.
+- **2026-02-08:** Added deterministic balance-tuning overlays (neutral defaults) and standardized recap reason tags for gameplay clarity.
 
 ## Change Log
 - **2026-02-08:** Initial creation of canonical rules reference (`v1.0` baseline).
 - **2026-02-08:** Promoted `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, and `R-FLD-004` from OPEN to IMPLEMENTED.
 - **2026-02-08:** Promoted `R-CLK-002`, `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` to IMPLEMENTED (assumption-backed closures).
 - **2026-02-08:** Promoted `R-OT-003`, `R-CONV-001`, and `R-CONV-002` to IMPLEMENTED (assumption-backed closures).
+- **2026-02-08:** Added balance/UX polish overlays (message clarity + bot/tuning assumptions) without changing canonical table values.
