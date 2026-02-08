@@ -94,6 +94,15 @@ Legacy reference mapping:
   - Browser screenshot artifacts at 1280x800 / 1440x900 / 390x844 once Playwright tooling is available in this environment.
   - Final manual browser smoke checks tied to those screenshot captures.
 
+## Trace Follow-Up Note (Feb 8, 2026)
+- 20 deterministic traces completed cleanly (`GAME_OVER` in every run) with no invariant/stall failures.
+- Coverage gap remains for scenario paths that did not occur in that seed sweep:
+  - Overtime phases.
+  - 2PT conversion defense path.
+  - Coin-toss phase visibility in trace flow.
+- Follow-up task:
+  - Add a targeted scenario trace suite that forces OT, 2PT, and coin-toss branches and writes focused markdown traces for rule review.
+
 ## Open Questions / Deferred Ideas
 - Whether to introduce branded team abbreviations/logos once metadata exists.
 - Whether to add optional drive chart/play timeline in browser-only layout.
