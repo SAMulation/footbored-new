@@ -37,13 +37,19 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
   const { width: viewportWidth } = useWindowDimensions();
 
   const size = useMemo(() => {
-    if (viewportWidth >= 1400) {
-      return { width: 144, height: 194, icon: 56, name: 14 };
+    if (viewportWidth >= 1500) {
+      return { width: 150, height: 198, icon: 58, name: 14 };
+    }
+    if (viewportWidth >= 1300) {
+      return { width: 134, height: 182, icon: 52, name: 13 };
     }
     if (viewportWidth >= 1100) {
-      return { width: 124, height: 172, icon: 48, name: 13 };
+      return { width: 120, height: 168, icon: 46, name: 12 };
     }
-    return { width: 102, height: 142, icon: 40, name: 12 };
+    if (viewportWidth >= 700) {
+      return { width: 106, height: 146, icon: 40, name: 12 };
+    }
+    return { width: 94, height: 130, icon: 34, name: 11 };
   }, [viewportWidth]);
 
   return (
@@ -73,7 +79,7 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
       </View>
 
       <View style={styles.footer}>
-        <Text style={[styles.name, { fontSize: size.name }]} numberOfLines={1}>
+        <Text style={[styles.name, { fontSize: size.name }]} numberOfLines={2}>
           {card.name}
         </Text>
       </View>
@@ -140,13 +146,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f2f4f6',
     borderTopColor: 'rgba(0,0,0,0.2)',
     borderTopWidth: 1,
-    paddingVertical: 8,
+    minHeight: 34,
+    paddingVertical: 6,
     paddingHorizontal: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   name: {
     color: '#2b2f34',
     fontWeight: '900',
     textTransform: 'uppercase',
+    textAlign: 'center',
+    lineHeight: 13,
   },
 });

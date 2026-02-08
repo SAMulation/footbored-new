@@ -5,11 +5,7 @@ export type PlayQuality = 'B' | 'G' | 'D' | 'O' | 'W';
 export type MultiplierRank = 'K' | 'Q' | 'J' | '10';
 
 // Remaining open items not implemented in this engine slice.
-export const OPEN_RULE_IDS = [
-  'R-CLK-005',
-  'R-KICK-001',
-  'R-KICK-002',
-] as const;
+export const OPEN_RULE_IDS = [] as const;
 
 export const STANDARD_QUALITY_MATRIX: Record<StandardPlayType, Record<StandardPlayType, PlayQuality>> = {
   SR: { SR: 'W', LR: 'D', SP: 'D', LP: 'G' },

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
@@ -19,6 +19,36 @@ function generateRoomCode(): string {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+function formatLastPlayMessage(gameState: ClientGameState): string | null {
+  if (!gameState.lastPlay?.message) {
+    return null;
+  }
+
+  const message = gameState.lastPlay.message;
+  const flags = gameState.lastPlay.flags;
+  const detailParts: string[] = [];
+
+  if (flags?.kickType) {
+    detailParts.push(flags.kickType.replace('_', ' '));
+  }
+  if (typeof flags?.kickDistance === 'number') {
+    detailParts.push(`${flags.kickDistance}y`);
+  }
+  if (typeof flags?.returnYards === 'number' && flags.returnYards > 0) {
+    detailParts.push(`Return ${flags.returnYards}y`);
+  }
+  if (flags?.kickoffTouchback) {
+    detailParts.push('Touchback');
+  }
+  if (flags?.icedKicker) {
+    detailParts.push('Iced');
+  }
+
+  return detailParts.length > 0
+    ? `${message}\n${detailParts.join(' | ')}`
+    : message;
+}
+
 function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { title: string; message: string } {
   if (gameState.waitingForOpponent) {
     return {
@@ -26,10 +56,11 @@ function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { ti
       message: 'Waiting for opponent to lock in a card...',
     };
   }
-  if (gameState.lastPlay?.message) {
+  const lastPlayMessage = formatLastPlayMessage(gameState);
+  if (lastPlayMessage) {
     return {
       title: 'PREVIOUS PLAY',
-      message: gameState.lastPlay.message,
+      message: lastPlayMessage,
     };
   }
   if (isMyTurn) {
@@ -51,6 +82,7 @@ interface LobbyShellProps {
   onJoinRoom: () => void;
   onCreateRoom: () => void;
   isConnected: boolean;
+  isPhone: boolean;
 }
 
 function LobbyShell({
@@ -60,12 +92,13 @@ function LobbyShell({
   onJoinRoom,
   onCreateRoom,
   isConnected,
+  isPhone,
 }: LobbyShellProps) {
   return (
     <View style={styles.lobbyShell}>
-      <View style={styles.lobbyPanel}>
+      <View style={[styles.lobbyPanel, isPhone && styles.lobbyPanelPhone]}>
         <View style={styles.lobbyHeader}>
-          <Text style={styles.title}>FootBored 6.0</Text>
+          <Text style={[styles.title, isPhone && styles.titlePhone]}>FootBored 6.0</Text>
           <Text style={styles.lobbyConnection}>{isConnected ? 'Server Online' : 'Server Offline'}</Text>
         </View>
 
@@ -85,7 +118,7 @@ function LobbyShell({
           placeholderTextColor="#95a5a6"
           maxLength={8}
         />
-        <View style={styles.joinActions}>
+        <View style={[styles.joinActions, isPhone && styles.joinActionsPhone]}>
           <TouchableOpacity style={styles.primaryButton} onPress={onJoinRoom}>
             <Text style={styles.primaryButtonText}>Join</Text>
           </TouchableOpacity>
@@ -104,19 +137,29 @@ interface InGameShellProps {
   matchMode: 'MULTIPLAYER' | 'BOT' | null;
   isMyTurn: boolean;
   possession: 'home' | 'away';
+  isPhone: boolean;
+  isCompactDesktop: boolean;
 }
 
-function InGameShell({ gameState, roomId, matchMode, isMyTurn, possession }: InGameShellProps) {
+function InGameShell({
+  gameState,
+  roomId,
+  matchMode,
+  isMyTurn,
+  possession,
+  isPhone,
+  isCompactDesktop,
+}: InGameShellProps) {
   const playContext = resolvePlayContext(gameState, isMyTurn);
 
   return (
-    <View style={styles.inGameShell}>
+    <View style={[styles.inGameShell, isCompactDesktop && styles.inGameShellCompact]}>
       <View style={styles.inGameTopRow}>
         {matchMode === 'BOT' ? <Text style={styles.modeBadge}>BOT MATCH</Text> : <View />}
         <Text style={styles.roomBadge}>ROOM: {roomId ?? 'N/A'}</Text>
       </View>
 
-      <View style={styles.fieldFrame}>
+      <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact]}>
         <FieldView
           ballOn={gameState.field.ballOn}
           toGo={gameState.field.toGo}
@@ -124,9 +167,9 @@ function InGameShell({ gameState, roomId, matchMode, isMyTurn, possession }: InG
         />
       </View>
 
-      <View style={styles.playContextPanel}>
+      <View style={[styles.playContextPanel, isCompactDesktop && styles.playContextPanelCompact]}>
         <Text style={styles.playContextTitle}>{playContext.title}</Text>
-        <Text style={styles.playContextText}>{playContext.message}</Text>
+        <Text style={[styles.playContextText, isPhone && styles.playContextTextPhone]}>{playContext.message}</Text>
       </View>
     </View>
   );
@@ -137,13 +180,14 @@ interface GameOverShellProps {
   awayScore: number;
   winner: string;
   onPlayAgain: () => void;
+  isPhone: boolean;
 }
 
-function GameOverShell({ homeScore, awayScore, winner, onPlayAgain }: GameOverShellProps) {
+function GameOverShell({ homeScore, awayScore, winner, onPlayAgain, isPhone }: GameOverShellProps) {
   return (
-    <View style={styles.gameOverOverlay}>
-      <Text style={styles.gameOverTitle}>GAME OVER</Text>
-      <Text style={styles.gameOverScore}>HOME {homeScore} - {awayScore} AWAY</Text>
+    <View style={[styles.gameOverOverlay, isPhone && styles.gameOverOverlayPhone]}>
+      <Text style={[styles.gameOverTitle, isPhone && styles.gameOverTitlePhone]}>GAME OVER</Text>
+      <Text style={[styles.gameOverScore, isPhone && styles.gameOverScorePhone]}>HOME {homeScore} - {awayScore} AWAY</Text>
       <Text style={styles.gameOverWinner}>WINNER: {winner}</Text>
       <TouchableOpacity style={styles.primaryButton} onPress={onPlayAgain}>
         <Text style={styles.primaryButtonText}>Play Again</Text>
@@ -153,6 +197,11 @@ function GameOverShell({ homeScore, awayScore, winner, onPlayAgain }: GameOverSh
 }
 
 export default function GameScreen() {
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const isPhone = viewportWidth < 620;
+  const isCompactDesktop = viewportWidth < 1280;
+  const isShortSurface = viewportHeight < 760;
+
   const {
     gameState,
     isConnected,
@@ -270,7 +319,7 @@ export default function GameScreen() {
       />
 
       <View style={styles.playSurface}>
-        <View style={styles.surfaceContent}>
+        <View style={[styles.surfaceContent, isShortSurface && styles.surfaceContentShort]}>
           {!gameState ? (
             <LobbyShell
               roomInput={roomInput}
@@ -279,6 +328,7 @@ export default function GameScreen() {
               onJoinRoom={joinSelectedRoom}
               onCreateRoom={createRoom}
               isConnected={isConnected}
+              isPhone={isPhone}
             />
           ) : (
             <InGameShell
@@ -287,11 +337,13 @@ export default function GameScreen() {
               matchMode={matchMode}
               isMyTurn={isMyTurn}
               possession={possession}
+              isPhone={isPhone}
+              isCompactDesktop={isCompactDesktop}
             />
           )}
         </View>
 
-        <View style={styles.bannerStack}>
+        <View style={[styles.bannerStack, isPhone && styles.bannerStackPhone]}>
           {isRejoining && (
             <View style={styles.bannerInfo}>
               <Text style={styles.bannerText}>Reconnecting...</Text>
@@ -315,6 +367,7 @@ export default function GameScreen() {
             awayScore={awayScore}
             winner={winner}
             onPlayAgain={playAgain}
+            isPhone={isPhone}
           />
         )}
       </View>
@@ -351,6 +404,10 @@ const styles = StyleSheet.create({
     maxWidth: 1200,
     flex: 1,
   },
+  surfaceContentShort: {
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
   lobbyShell: {
     flex: 1,
     justifyContent: 'center',
@@ -368,6 +425,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  lobbyPanelPhone: {
+    padding: 14,
+    gap: 8,
+  },
   lobbyHeader: {
     width: '100%',
     alignItems: 'center',
@@ -379,6 +440,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '900',
     textAlign: 'center',
+  },
+  titlePhone: {
+    fontSize: 26,
   },
   lobbyConnection: {
     color: '#bde3c1',
@@ -428,6 +492,10 @@ const styles = StyleSheet.create({
     gap: 10,
     width: '100%',
   },
+  joinActionsPhone: {
+    flexDirection: 'column',
+    gap: 8,
+  },
   primaryButton: {
     backgroundColor: '#2d8a3e',
     paddingHorizontal: 16,
@@ -452,9 +520,12 @@ const styles = StyleSheet.create({
   },
   inGameShell: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
     gap: 12,
+  },
+  inGameShellCompact: {
+    gap: 9,
   },
   inGameTopRow: {
     width: '100%',
@@ -491,6 +562,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
   },
+  fieldFrameCompact: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
   playContextPanel: {
     width: '100%',
     maxWidth: 1050,
@@ -502,6 +577,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: 'center',
     gap: 6,
+  },
+  playContextPanelCompact: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   playContextTitle: {
     color: '#f1c40f',
@@ -515,6 +594,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  playContextTextPhone: {
+    fontSize: 15,
+  },
   bannerStack: {
     position: 'absolute',
     left: 14,
@@ -522,6 +604,11 @@ const styles = StyleSheet.create({
     bottom: 10,
     alignItems: 'center',
     gap: 6,
+  },
+  bannerStackPhone: {
+    bottom: 6,
+    left: 10,
+    right: 10,
   },
   bannerInfo: {
     backgroundColor: 'rgba(41,128,185,0.85)',
@@ -553,15 +640,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  gameOverOverlayPhone: {
+    top: 18,
+    left: 12,
+    right: 12,
+    padding: 12,
+  },
   gameOverTitle: {
     color: '#f1c40f',
     fontWeight: '900',
     fontSize: 22,
   },
+  gameOverTitlePhone: {
+    fontSize: 18,
+  },
   gameOverScore: {
     color: '#ffffff',
     fontSize: 17,
     fontWeight: '700',
+  },
+  gameOverScorePhone: {
+    fontSize: 14,
   },
   gameOverWinner: {
     color: '#d7f7d8',

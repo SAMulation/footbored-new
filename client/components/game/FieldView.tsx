@@ -16,13 +16,18 @@ function clampToField(value: number): number {
 
 export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldViewProps) {
   const { width: viewportWidth } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const isDesktopWide = viewportWidth >= 1500;
+  const isDesktop = viewportWidth >= 1100;
+  const isTablet = viewportWidth >= 700 && viewportWidth < 1100;
+  const isPhone = viewportWidth < 520;
 
   const trackWidth = useMemo(() => {
-    const widthPct = Platform.OS === 'web' ? 0.52 : 0.88;
+    const widthPct = isWeb ? (isDesktopWide ? 0.56 : isDesktop ? 0.58 : isTablet ? 0.72 : 0.9) : 0.88;
     const raw = viewportWidth * widthPct;
-    return Math.max(280, Math.min(760, Math.round(raw)));
-  }, [viewportWidth]);
-  const trackHeight = Platform.OS === 'web' ? 170 : 132;
+    return Math.max(isPhone ? 250 : 280, Math.min(isDesktopWide ? 820 : 760, Math.round(raw)));
+  }, [isDesktop, isDesktopWide, isPhone, isTablet, isWeb, viewportWidth]);
+  const trackHeight = isWeb ? (isDesktop ? 176 : isTablet ? 150 : 126) : 132;
   const endZoneWidth = Math.max(24, Math.round(trackWidth * 0.08));
 
   const safeBallOn = clampToField(ballOn);
@@ -49,11 +54,17 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
 
   const lineOfScrimmageLeft = (safeBallOn / 100) * trackWidth;
   const firstDownLeft = (firstDownSpot / 100) * trackWidth;
-  const offenseDirectionLabel = offenseSide === 'home' ? 'Home driving ->' : 'Away driving <-';
+  const offenseDirectionLabel = offenseSide === 'home'
+    ? (isPhone ? 'HOME ->' : 'Home driving ->')
+    : (isPhone ? 'AWAY <-' : 'Away driving <-');
   const majorYards = Array.from({ length: 11 }, (_, idx) => idx * 10);
   const hashYards = Array.from({ length: 21 }, (_, idx) => idx * 5);
-  const yardNumberLabels = ['10', '20', '30', '40', '50', '40', '30', '20', '10'];
-  const yardNumberPositions = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+  const yardNumberLabels = trackWidth < 420
+    ? ['10', '30', '50', '30', '10']
+    : ['10', '20', '30', '40', '50', '40', '30', '20', '10'];
+  const yardNumberPositions = trackWidth < 420
+    ? [12, 32, 50, 68, 88]
+    : [10, 20, 30, 40, 50, 60, 70, 80, 90];
 
   return (
     <View style={styles.container}>
@@ -100,6 +111,7 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
             key={`yard-number-${label}-${idx}`}
             style={[
               styles.yardNumber,
+              isPhone && styles.yardNumberPhone,
               {
                 left: `${yardNumberPositions[idx]}%`,
               },
@@ -110,9 +122,9 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
       </View>
 
       <View style={[styles.metaRow, { width: trackWidth }]}>
-        <Text style={styles.metaText}>Ball on {safeBallOn}</Text>
-        <Text style={styles.metaText}>Line to gain {firstDownSpot}</Text>
-        <Text style={styles.metaText}>{offenseDirectionLabel}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>Ball on {safeBallOn}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>Line to gain {firstDownSpot}</Text>
+        <Text style={[styles.metaText, isPhone && styles.metaTextPhone]}>{offenseDirectionLabel}</Text>
       </View>
     </View>
   );
@@ -205,6 +217,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     opacity: 0.9,
   },
+  yardNumberPhone: {
+    transform: [{ translateX: -8 }],
+    fontSize: 9,
+  },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -216,5 +232,8 @@ const styles = StyleSheet.create({
     color: '#deefd9',
     fontSize: 12,
     fontWeight: '700',
+  },
+  metaTextPhone: {
+    fontSize: 10,
   },
 });

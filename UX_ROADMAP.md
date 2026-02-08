@@ -81,6 +81,19 @@ Legacy reference mapping:
 - Manual smoke: quick-play bot flow on browser.
 - Manual smoke: two-tab multiplayer join and one down resolution.
 
+## Execution Progress
+- Completed in `uiux: broadcast hud shell and action rail pass`:
+  - Foundation shell split (`LobbyShell`, `InGameShell`, `GameOverShell`).
+  - Broadcast HUD upgrade with phase prompt, TO/deck context, and connection state.
+  - Field + context panel upgrade.
+  - Command rail integration for special actions + cards.
+- Completed in current polish pass:
+  - Responsive breakpoints for HUD, field sizing, shell spacing, and card/rail density.
+  - Improved disabled/unavailable affordances in command rail and special-action chips.
+- Pending:
+  - Browser screenshot artifacts at 1280x800 / 1440x900 / 390x844 once Playwright tooling is available in this environment.
+  - Final manual browser smoke checks tied to those screenshot captures.
+
 ## Open Questions / Deferred Ideas
 - Whether to introduce branded team abbreviations/logos once metadata exists.
 - Whether to add optional drive chart/play timeline in browser-only layout.
