@@ -34,23 +34,40 @@ export function PlayCard({ card, onPress, disabled = false }: PlayCardProps) {
   const backgroundColor = getCardColor(card.type);
   const iconName = getCardIcon(card.type);
   const familyLabel = getCardFamily(card.type);
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
 
   const size = useMemo(() => {
+    let cardSize = { width: 94, height: 130, icon: 34, name: 11 };
     if (viewportWidth >= 1500) {
-      return { width: 150, height: 198, icon: 58, name: 14 };
+      cardSize = { width: 150, height: 198, icon: 58, name: 14 };
+    } else if (viewportWidth >= 1300) {
+      cardSize = { width: 134, height: 182, icon: 52, name: 13 };
+    } else if (viewportWidth >= 1100) {
+      cardSize = { width: 120, height: 168, icon: 46, name: 12 };
+    } else if (viewportWidth >= 700) {
+      cardSize = { width: 106, height: 146, icon: 40, name: 12 };
     }
-    if (viewportWidth >= 1300) {
-      return { width: 134, height: 182, icon: 52, name: 13 };
+
+    if (viewportHeight < 860) {
+      cardSize = {
+        ...cardSize,
+        width: Math.max(88, cardSize.width - 8),
+        height: Math.max(122, cardSize.height - 18),
+        icon: Math.max(30, cardSize.icon - 6),
+      };
     }
-    if (viewportWidth >= 1100) {
-      return { width: 120, height: 168, icon: 46, name: 12 };
+    if (viewportHeight < 740) {
+      cardSize = {
+        ...cardSize,
+        width: Math.max(84, cardSize.width - 6),
+        height: Math.max(114, cardSize.height - 12),
+        icon: Math.max(28, cardSize.icon - 4),
+        name: Math.max(10, cardSize.name - 1),
+      };
     }
-    if (viewportWidth >= 700) {
-      return { width: 106, height: 146, icon: 40, name: 12 };
-    }
-    return { width: 94, height: 130, icon: 34, name: 11 };
-  }, [viewportWidth]);
+
+    return cardSize;
+  }, [viewportWidth, viewportHeight]);
 
   return (
     <Pressable

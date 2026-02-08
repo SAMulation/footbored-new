@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 import { FieldView } from '@/components/game/FieldView';
 import { GameHud } from '@/components/game/GameHud';
@@ -42,6 +42,9 @@ function formatLastPlayMessage(gameState: ClientGameState): string | null {
   if (typeof flags?.kickDistance === 'number') {
     detailParts.push(`${flags.kickDistance}y`);
   }
+  if (typeof flags?.kickResultSpot === 'number') {
+    detailParts.push(`Spot ${flags.kickResultSpot}`);
+  }
   if (typeof flags?.returnYards === 'number' && flags.returnYards > 0) {
     detailParts.push(`Return ${flags.returnYards}y`);
   }
@@ -70,6 +73,13 @@ function formatLastPlayMessage(gameState: ClientGameState): string | null {
 }
 
 function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { title: string; message: string } {
+  if (gameState.phase === GamePhase.COIN_TOSS) {
+    return {
+      title: 'COIN TOSS',
+      message: 'Opening toss and kickoff are resolving.',
+    };
+  }
+
   if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT && !isMyTurn) {
     return {
       title: 'CONVERSION',
@@ -367,6 +377,16 @@ export default function GameScreen() {
       .filter((item): item is SpecialActionItem => item !== null);
   }, [gameState, isMyTurn, specialActionsByType]);
 
+  const displayedHand = useMemo(() => {
+    if (!gameState) {
+      return [];
+    }
+    if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+      return [];
+    }
+    return gameState.myState.hand;
+  }, [gameState]);
+
   const joinSelectedRoom = () => {
     const normalized = roomInput.trim().toUpperCase();
     if (!normalized) {
@@ -405,7 +425,14 @@ export default function GameScreen() {
         awayDeckCount={awayDeckCount}
       />
 
-      <View style={styles.playSurface}>
+      <ScrollView
+        style={styles.playSurface}
+        contentContainerStyle={[
+          styles.playSurfaceContentWrap,
+          isShortSurface && styles.playSurfaceContentWrapShort,
+        ]}
+        showsVerticalScrollIndicator={!isPhone}
+        keyboardShouldPersistTaps="handled">
         <View style={[styles.surfaceContent, isShortSurface && styles.surfaceContentShort]}>
           {!gameState ? (
             <LobbyShell
@@ -457,11 +484,11 @@ export default function GameScreen() {
             isPhone={isPhone}
           />
         )}
-      </View>
+      </ScrollView>
 
       {gameState && (
         <PlayerHand
-          hand={gameState.myState.hand}
+          hand={displayedHand}
           onPlayCard={playCard}
           specialActions={specialActionItems}
           disabled={!isMyTurn || isGameOver || isRejoining}
@@ -480,16 +507,21 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     backgroundColor: '#245b29',
+    position: 'relative',
+  },
+  playSurfaceContentWrap: {
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    position: 'relative',
+  },
+  playSurfaceContentWrapShort: {
+    paddingVertical: 8,
   },
   surfaceContent: {
     width: '100%',
     maxWidth: 1200,
-    flex: 1,
   },
   surfaceContentShort: {
     paddingTop: 8,
@@ -606,10 +638,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   inGameShell: {
-    flex: 1,
-    justifyContent: 'space-evenly',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     gap: 12,
+    paddingBottom: 8,
   },
   inGameShellCompact: {
     gap: 9,
@@ -685,17 +717,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   bannerStack: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 10,
+    width: '100%',
     alignItems: 'center',
     gap: 6,
+    marginTop: 10,
+    marginBottom: 4,
   },
   bannerStackPhone: {
-    bottom: 6,
-    left: 10,
-    right: 10,
+    marginTop: 8,
+    marginBottom: 2,
   },
   bannerInfo: {
     backgroundColor: 'rgba(41,128,185,0.85)',

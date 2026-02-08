@@ -18,14 +18,23 @@ interface PlayerHandProps {
 }
 
 export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled }: PlayerHandProps) {
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const railHeight = useMemo(() => {
-    if (viewportWidth >= 1500) return 300;
-    if (viewportWidth >= 1300) return 276;
-    if (viewportWidth >= 1100) return 250;
-    if (viewportWidth >= 700) return 218;
-    return 194;
-  }, [viewportWidth]);
+    let baseHeight = 194;
+    if (viewportWidth >= 1500) baseHeight = 292;
+    else if (viewportWidth >= 1300) baseHeight = 268;
+    else if (viewportWidth >= 1100) baseHeight = 244;
+    else if (viewportWidth >= 700) baseHeight = 214;
+
+    if (viewportHeight < 860) {
+      baseHeight -= 28;
+    }
+    if (viewportHeight < 760) {
+      baseHeight -= 30;
+    }
+
+    return Math.max(172, baseHeight);
+  }, [viewportWidth, viewportHeight]);
   const isPhone = viewportWidth < 520;
 
   return (
@@ -95,7 +104,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: '#3a404a',
     paddingTop: 10,
-    paddingBottom: 16,
+    paddingBottom: 12,
     gap: 10,
   },
   containerDisabled: {
@@ -165,7 +174,7 @@ const styles = StyleSheet.create({
   },
   cardsRow: {
     paddingHorizontal: 16,
-    paddingBottom: 2,
+    paddingBottom: 6,
   },
   emptyState: {
     flex: 1,
