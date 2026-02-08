@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { RULE_ASSUMPTIONS } from '../rules/assumptions';
+
+test('rule assumptions config is loaded and frozen', () => {
+  assert.equal(typeof RULE_ASSUMPTIONS.version, 'string');
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.kickoff), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.punt), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.fieldGoal), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.fieldGoal.distanceBands), true);
+});
+
+test('field-goal distance bands are monotonic and bounded', () => {
+  const bands = RULE_ASSUMPTIONS.fieldGoal.distanceBands;
+  assert(bands.length >= 3);
+
+  let lastMax = 0;
+  for (const band of bands) {
+    assert(band.maxDistance > lastMax);
+    assert(band.successRate >= 0 && band.successRate <= 1);
+    lastMax = band.maxDistance;
+  }
+});
+
+test('kick assumptions stay in legal football ranges', () => {
+  assert(RULE_ASSUMPTIONS.kickoff.touchbackSpot >= 20 && RULE_ASSUMPTIONS.kickoff.touchbackSpot <= 30);
+  assert(RULE_ASSUMPTIONS.kickoff.returnSpotMin < RULE_ASSUMPTIONS.kickoff.returnSpotMax);
+
+  assert(RULE_ASSUMPTIONS.punt.grossYardsMin > 0);
+  assert(RULE_ASSUMPTIONS.punt.grossYardsMax > RULE_ASSUMPTIONS.punt.grossYardsMin);
+  assert(RULE_ASSUMPTIONS.punt.returnYardsMin >= 0);
+  assert(RULE_ASSUMPTIONS.punt.returnYardsMax >= RULE_ASSUMPTIONS.punt.returnYardsMin);
+
+  assert(RULE_ASSUMPTIONS.fieldGoal.icingPenalty > 0);
+  assert(RULE_ASSUMPTIONS.fieldGoal.icingPenalty < 1);
+});
