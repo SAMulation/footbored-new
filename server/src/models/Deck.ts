@@ -31,8 +31,7 @@ export class Deck {
     
     for (let i = 0; i < amount; i++) {
       if (this.cards.length === 0) {
-        // Logic to handle empty deck/reshuffle goes here later
-        break;
+        this.reset();
       }
       drawn.push(this.cards.pop()!);
     }

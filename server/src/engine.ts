@@ -1,4 +1,4 @@
-import { Card, GamePhase, PlayType, PlayerState, ServerGameState } from '../../shared/types';
+import { Card, GamePhase, PlayType, PlayerState, ServerGameState, SpecialActionState } from '../../shared/types';
 import { GAME_CONFIG } from '../../shared/constants';
 import { Deck } from './models/Deck';
 import { Hand } from './models/Hand';
@@ -60,12 +60,20 @@ interface SamePlayOverrides {
   message?: string;
 }
 
+interface CardSelection {
+  card: Card;
+  fromHand: boolean;
+  specialType: PlayType | null;
+}
+
 const FIELD_GOAL_POINTS = 3;
 const SAFETY_POINTS = 2;
 const PLAY_CLOCK_TICK_SECONDS = 30;
 const QUARTER_SECONDS = 900;
 const MIDFIELD_SPOT = 50;
 const STANDARD_PLAYS: StandardPlayType[] = ['SR', 'LR', 'SP', 'LP'];
+const SPECIAL_PLAYS: PlayType[] = ['TP', 'HM', 'FG', 'PT', 'TO'];
+const SPECIAL_CARD_PREFIX = 'SPECIAL';
 
 export class RuleNotImplementedError extends Error {
   constructor(public readonly ruleId: string, message: string) {
@@ -111,6 +119,14 @@ export class GameEngine {
 
   private overtimeCoinWinner: TeamSide;
   private overtimePossessionsCompleted = 0;
+  private standardPlaysUsedBySide: Record<TeamSide, number> = {
+    home: 0,
+    away: 0,
+  };
+  private trickPlayChargesBySide: Record<TeamSide, number> = {
+    home: 1,
+    away: 1,
+  };
 
   constructor(roomId: string) {
     this.overtimeCoinWinner = hashToIndex(`${roomId}|ot-coin`, 2) === 0 ? 'home' : 'away';
@@ -153,10 +169,17 @@ export class GameEngine {
     const offenseSide = this.getOffenseSide();
     const isOffense = side === offenseSide;
     const slot = isOffense ? 'offenseCardId' : 'defenseCardId';
-    const hand = this.getHandForSide(side);
+    const handCard = this.state.players[side].hand.find((card) => card.id === cardId);
+    const specialType = this.parseSpecialTypeFromCardId(side, cardId);
 
-    if (!hand.hasCard(cardId)) {
+    if (!handCard && !specialType) {
       return { accepted: false, resolved: false, reason: 'card_not_in_hand' };
+    }
+
+    const submittedType = handCard?.type ?? specialType!;
+
+    if (specialType && !this.canUseSpecial(side, submittedType, isOffense)) {
+      return { accepted: false, resolved: false, reason: 'special_not_available' };
     }
 
     if (this.state.pendingMove[slot]) {
@@ -164,16 +187,11 @@ export class GameEngine {
     }
 
     if (isOffense) {
-      const offenseCard = this.state.players[side].hand.find((card) => card.id === cardId);
-      if (!offenseCard) {
-        return { accepted: false, resolved: false, reason: 'card_not_in_hand' };
-      }
-
-      if (offenseCard.type === 'HM' && this.state.players[side].hailMaryCount <= 0) {
+      if (submittedType === 'HM' && this.state.players[side].hailMaryCount <= 0) {
         return { accepted: false, resolved: false, reason: 'hail_mary_exhausted' };
       }
 
-      if (this.isShootoutOvertime() && ['HM', 'TP', 'PT', 'FG'].includes(offenseCard.type)) {
+      if (this.isShootoutOvertime() && ['HM', 'TP', 'PT', 'FG'].includes(submittedType)) {
         return { accepted: false, resolved: false, reason: 'shootout_restriction' };
       }
     }
@@ -226,6 +244,8 @@ export class GameEngine {
     this.state.lastPlay = undefined;
     this.state.phase = GamePhase.LOBBY;
     this.overtimePossessionsCompleted = 0;
+    this.standardPlaysUsedBySide = { home: 0, away: 0 };
+    this.trickPlayChargesBySide = { home: 1, away: 1 };
 
     this.state.players.home = {
       ...this.createPlayer('Home Team'),
@@ -247,13 +267,30 @@ export class GameEngine {
     const offenseHand = this.getHandForSide(offenseSide);
     const defenseHand = this.getHandForSide(defenseSide);
 
-    const offenseCard = offenseHand.playCard(offenseCardId!);
-    const defenseCard = defenseHand.playCard(defenseCardId!);
+    const offenseSelection = this.takeSubmittedCard(offenseSide, offenseCardId!, offenseHand, true);
+    const defenseSelection = this.takeSubmittedCard(defenseSide, defenseCardId!, defenseHand, false);
 
-    if (!offenseCard || !defenseCard) {
+    if (!offenseSelection || !defenseSelection) {
       this.state.pendingMove = {};
       this.state.lastPlay = undefined;
       return;
+    }
+
+    const offenseCard = offenseSelection.card;
+    const defenseCard = defenseSelection.card;
+
+    if (offenseSelection.specialType === 'TP') {
+      this.trickPlayChargesBySide[offenseSide] = Math.max(0, this.trickPlayChargesBySide[offenseSide] - 1);
+    }
+    if (defenseSelection.specialType === 'TP') {
+      this.trickPlayChargesBySide[defenseSide] = Math.max(0, this.trickPlayChargesBySide[defenseSide] - 1);
+    }
+
+    if (offenseSelection.fromHand && isStandardPlay(offenseCard.type)) {
+      this.trackStandardCycleUsage(offenseSide);
+    }
+    if (defenseSelection.fromHand && isStandardPlay(defenseCard.type)) {
+      this.trackStandardCycleUsage(defenseSide);
     }
 
     if (offenseCard.type === 'HM') {
@@ -262,10 +299,10 @@ export class GameEngine {
 
     const outcome = this.evaluateMatchup(offenseCard, defenseCard, offenseSide, defenseSide);
 
-    if (outcome.keepOffenseCard) {
+    if (outcome.keepOffenseCard && offenseSelection.fromHand) {
       offenseHand.returnCardToHand(offenseCard);
     }
-    if (outcome.keepDefenseCard) {
+    if (outcome.keepDefenseCard && defenseSelection.fromHand) {
       defenseHand.returnCardToHand(defenseCard);
     }
 
@@ -325,6 +362,138 @@ export class GameEngine {
     if (this.state.phase !== GamePhase.GAME_OVER) {
       this.state.phase = GamePhase.RESOLUTION;
     }
+  }
+
+  private buildSpecialCardId(side: TeamSide, type: PlayType): string {
+    return `${SPECIAL_CARD_PREFIX}:${side}:${type}`;
+  }
+
+  private parseSpecialTypeFromCardId(side: TeamSide, cardId: string): PlayType | null {
+    const [prefix, idSide, type] = cardId.split(':');
+    if (prefix !== SPECIAL_CARD_PREFIX || idSide !== side) {
+      return null;
+    }
+
+    if (!SPECIAL_PLAYS.includes(type as PlayType)) {
+      return null;
+    }
+
+    return type as PlayType;
+  }
+
+  private canUseSpecial(side: TeamSide, type: PlayType, isOffense: boolean): boolean {
+    if (!SPECIAL_PLAYS.includes(type)) {
+      return false;
+    }
+
+    if (type === 'TP') {
+      return this.trickPlayChargesBySide[side] > 0;
+    }
+
+    if (type === 'HM') {
+      return isOffense && this.state.players[side].hailMaryCount > 0;
+    }
+
+    if (type === 'FG') {
+      return isOffense && this.state.players[side].canFieldGoal;
+    }
+
+    if (type === 'PT') {
+      return isOffense && this.state.players[side].canPunt;
+    }
+
+    if (type === 'TO') {
+      return isOffense && this.state.players[side].timeouts > 0;
+    }
+
+    return false;
+  }
+
+  private takeSubmittedCard(side: TeamSide, cardId: string, hand: Hand, isOffense: boolean): CardSelection | null {
+    const fromHand = hand.playCard(cardId);
+    if (fromHand) {
+      return {
+        card: fromHand,
+        fromHand: true,
+        specialType: null,
+      };
+    }
+
+    const specialType = this.parseSpecialTypeFromCardId(side, cardId);
+    if (!specialType || !this.canUseSpecial(side, specialType, isOffense)) {
+      return null;
+    }
+
+    return {
+      card: {
+        id: cardId,
+        type: specialType,
+        name: specialType,
+        isSpecial: true,
+      },
+      fromHand: false,
+      specialType,
+    };
+  }
+
+  private trackStandardCycleUsage(side: TeamSide) {
+    this.standardPlaysUsedBySide[side] += 1;
+    if (this.standardPlaysUsedBySide[side] < GAME_CONFIG.DECK_SIZE) {
+      return;
+    }
+
+    this.standardPlaysUsedBySide[side] = 0;
+    this.trickPlayChargesBySide[side] = 1;
+  }
+
+  private getSpecialActionsForSide(side: TeamSide): SpecialActionState[] {
+    const isOffense = side === this.getOffenseSide();
+    const down = this.state.field.down;
+    const timeouts = this.state.players[side].timeouts;
+    const hailMaryCount = this.state.players[side].hailMaryCount;
+    const trickRemaining = this.trickPlayChargesBySide[side];
+
+    const actions: SpecialActionState[] = [];
+
+    for (const type of SPECIAL_PLAYS) {
+      const remaining = type === 'TP'
+        ? trickRemaining
+        : type === 'HM'
+          ? hailMaryCount
+          : type === 'TO'
+            ? timeouts
+            : null;
+
+      const enabled = this.canUseSpecial(side, type, isOffense)
+        && (type !== 'PT' || this.state.field.isOvertime || down === 4);
+
+      let reason: string | undefined;
+      if (!enabled) {
+        if (!isOffense && type !== 'TP') {
+          reason = 'offense_only';
+        } else if (type === 'TP' && trickRemaining <= 0) {
+          reason = 'tp_exhausted';
+        } else if (type === 'HM' && hailMaryCount <= 0) {
+          reason = 'hm_exhausted';
+        } else if (type === 'TO' && timeouts <= 0) {
+          reason = 'timeouts_exhausted';
+        } else if (type === 'PT' && !this.state.field.isOvertime && down !== 4) {
+          reason = 'fourth_down_only';
+        } else {
+          reason = 'unavailable';
+        }
+      }
+
+      actions.push({
+        id: this.buildSpecialCardId(side, type),
+        type,
+        enabled,
+        remaining,
+        reason,
+      });
+    }
+
+    return actions;
   }
 
   private evaluateMatchup(offenseCard: Card, defenseCard: Card, offenseSide: TeamSide, defenseSide: TeamSide): MatchupResult {
@@ -964,6 +1133,8 @@ export class GameEngine {
     this.state.players.away.hand = this.handAway.toState().cards;
     this.state.players.home.deckCount = this.deckHome.count();
     this.state.players.away.deckCount = this.deckAway.count();
+    this.state.players.home.specialActions = this.getSpecialActionsForSide('home');
+    this.state.players.away.specialActions = this.getSpecialActionsForSide('away');
   }
 
   private dealInitialHands() {
@@ -981,6 +1152,7 @@ export class GameEngine {
       hailMaryCount: 3,
       canFieldGoal: true,
       canPunt: true,
+      specialActions: [],
       hand: [],
       deckCount: GAME_CONFIG.DECK_SIZE,
       isHost: false,

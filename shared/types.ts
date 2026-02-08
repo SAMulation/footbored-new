@@ -22,6 +22,14 @@ export interface PlayerHand {
   maxSize: number;
 }
 
+export interface SpecialActionState {
+  id: string;
+  type: PlayType;
+  enabled: boolean;
+  remaining: number | null;
+  reason?: string;
+}
+
 export enum GamePhase {
   LOBBY = 'LOBBY',
   COIN_TOSS = 'COIN_TOSS',
@@ -58,6 +66,7 @@ export interface PlayerState {
   hailMaryCount: number;
   canFieldGoal: boolean;
   canPunt: boolean;
+  specialActions: SpecialActionState[];
   hand: Card[];
   deckCount: number;
   isHost: boolean;

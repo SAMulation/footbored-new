@@ -120,23 +120,54 @@ function chooseBotCard(room: RoomContext): string | null {
     return null;
   }
 
-  const hand = room.game.state.players[room.botSeat].hand;
-  if (hand.length === 0) {
-    return null;
-  }
+  const player = room.game.state.players[room.botSeat];
+  const hand = player.hand;
+  const offenseSide = getOffenseSide(room.game);
+  const isOffense = room.botSeat === offenseSide;
+
+  const specialId = (type: 'TP' | 'HM' | 'FG' | 'PT' | 'TO') => {
+    return player.specialActions.find((action) => action.type === type && action.enabled)?.id ?? null;
+  };
 
   if (room.botDifficulty === 'easy') {
-    return hand[0].id;
+    return hand[0]?.id ?? specialId('TP') ?? specialId('TO');
   }
 
-  const { down, toGo } = room.game.state.field;
-  if (down === 4) {
-    const punt = hand.find((card) => card.type === 'PT');
-    if (punt) {
-      return punt.id;
+  if (isOffense) {
+    const { down, toGo, ballOn } = room.game.state.field;
+
+    if (down === 4) {
+      const fg = specialId('FG');
+      const pt = specialId('PT');
+      if (fg && ballOn >= 60) {
+        return fg;
+      }
+      if (pt) {
+        return pt;
+      }
+    }
+
+    if (toGo >= 14) {
+      const hm = specialId('HM');
+      if (hm) {
+        return hm;
+      }
+    }
+
+    if (toGo >= 8) {
+      const tp = specialId('TP');
+      if (tp) {
+        return tp;
+      }
+    }
+  } else {
+    const tp = specialId('TP');
+    if (tp && room.game.state.field.toGo >= 8) {
+      return tp;
     }
   }
 
+  const { down, toGo } = room.game.state.field;
   if (toGo <= 3) {
     const short = hand.find((card) => card.type === 'SR' || card.type === 'SP');
     if (short) {
@@ -149,7 +180,7 @@ function chooseBotCard(room: RoomContext): string | null {
     }
   }
 
-  return hand[0].id;
+  return hand[0]?.id ?? specialId('TO') ?? specialId('TP');
 }
 
 function maybeRunBotTurn(io: Server, room: RoomContext) {

@@ -29,3 +29,10 @@ This file is append-only and tracks provisional implementation assumptions used 
 - Rationale: Touchback/return mechanics are referenced in rules but not fully specified.
 - Verification: `server/src/__tests__/assumptions-config.test.ts` (config load), plus kickoff behavior tests to be added in subsequent commits.
 - Status: ACTIVE
+
+### 2026-02-08 - Play Model (Virtual Specials)
+- Rule IDs: `R-DECK-001`, `R-DECK-003`, `R-DECK-004` (implementation overlay)
+- Decision: Keep random 3-card hand model for standard plays, and expose virtual special actions (`TP/HM/FG/PT/TO`) as selectable IDs outside the hand.
+- Rationale: Improves practical playability quickly while preserving option to tune hand size and inventory model later.
+- Verification: `server/src/__tests__/special-actions.test.ts` and bot/socket regressions.
+- Status: ACTIVE

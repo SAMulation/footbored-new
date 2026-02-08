@@ -29,8 +29,21 @@ export const SPECIAL_CARDS = {
   HAIL_MARY: createCard('HM', 'Hail Mary', 'Desperation throw.'),
 };
 
+function resolveHandSize(): number {
+  const raw = (typeof process !== 'undefined' && process.env)
+    ? process.env.FB_HAND_SIZE
+    : undefined;
+  const parsed = Number.parseInt(raw ?? '', 10);
+
+  if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 7) {
+    return parsed;
+  }
+
+  return 3;
+}
+
 export const GAME_CONFIG = {
-  HAND_SIZE: 3,
+  HAND_SIZE: resolveHandSize(),
   DECK_SIZE: 12,
   TOUCHDOWN_POINTS: 6,
 };
