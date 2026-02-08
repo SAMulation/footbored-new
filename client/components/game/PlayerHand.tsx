@@ -20,22 +20,39 @@ interface PlayerHandProps {
 
 export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bottomInset = 0 }: PlayerHandProps) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
-  const railHeight = useMemo(() => {
-    let baseHeight = 194;
-    if (viewportWidth >= 1500) baseHeight = 292;
-    else if (viewportWidth >= 1300) baseHeight = 268;
-    else if (viewportWidth >= 1100) baseHeight = 244;
-    else if (viewportWidth >= 700) baseHeight = 214;
+  const railBounds = useMemo(() => {
+    let minHeight = 186;
+    let maxHeight = 286;
+
+    if (viewportWidth >= 1500) {
+      minHeight = 212;
+      maxHeight = 334;
+    } else if (viewportWidth >= 1300) {
+      minHeight = 204;
+      maxHeight = 320;
+    } else if (viewportWidth >= 1100) {
+      minHeight = 194;
+      maxHeight = 302;
+    } else if (viewportWidth >= 700) {
+      minHeight = 188;
+      maxHeight = 292;
+    }
 
     if (viewportHeight < 860) {
-      baseHeight -= 28;
+      minHeight -= 10;
+      maxHeight -= 22;
     }
     if (viewportHeight < 760) {
-      baseHeight -= 30;
+      minHeight -= 10;
+      maxHeight -= 24;
     }
 
-    return Math.max(172, baseHeight);
+    return {
+      minHeight: Math.max(172, minHeight),
+      maxHeight: Math.max(244, maxHeight),
+    };
   }, [viewportWidth, viewportHeight]);
+
   const isPhone = viewportWidth < 520;
 
   return (
@@ -43,7 +60,8 @@ export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bo
       style={[
         styles.container,
         {
-          height: railHeight,
+          minHeight: railBounds.minHeight,
+          maxHeight: railBounds.maxHeight,
           paddingBottom: Math.max(12, Math.round(bottomInset) + 8),
         },
         disabled && styles.containerDisabled,
@@ -109,20 +127,21 @@ export function PlayerHand({ hand, onPlayCard, specialActions = [], disabled, bo
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    backgroundColor: '#1a1d22',
+    backgroundColor: '#171b22',
     borderTopWidth: 2,
-    borderTopColor: '#3a404a',
+    borderTopColor: '#3a4454',
     paddingTop: 10,
     gap: 10,
   },
   containerDisabled: {
-    backgroundColor: '#171a1f',
+    backgroundColor: '#151920',
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
+    gap: 10,
   },
   label: {
     color: '#d2d6dc',

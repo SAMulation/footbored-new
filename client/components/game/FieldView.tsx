@@ -23,11 +23,14 @@ export function FieldView({ ballOn, toGo, offenseSide, animate = true }: FieldVi
   const isPhone = viewportWidth < 520;
 
   const trackWidth = useMemo(() => {
-    const widthPct = isWeb ? (isDesktopWide ? 0.56 : isDesktop ? 0.58 : isTablet ? 0.72 : 0.9) : 0.88;
+    const widthPct = isWeb
+      ? (isDesktopWide ? 0.78 : isDesktop ? 0.84 : isTablet ? 0.9 : 0.94)
+      : 0.9;
     const raw = viewportWidth * widthPct;
-    return Math.max(isPhone ? 250 : 280, Math.min(isDesktopWide ? 820 : 760, Math.round(raw)));
+    return Math.max(isPhone ? 256 : 320, Math.min(isDesktopWide ? 1060 : 980, Math.round(raw)));
   }, [isDesktop, isDesktopWide, isPhone, isTablet, isWeb, viewportWidth]);
-  const trackHeight = isWeb ? (isDesktop ? 176 : isTablet ? 150 : 126) : 132;
+
+  const trackHeight = isWeb ? (isDesktop ? 192 : isTablet ? 158 : 130) : 134;
   const endZoneWidth = Math.max(24, Math.round(trackWidth * 0.08));
 
   const safeBallOn = clampToField(ballOn);
@@ -134,8 +137,8 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    paddingVertical: 8,
-    gap: 6,
+    paddingVertical: 10,
+    gap: 8,
   },
   track: {
     backgroundColor: '#2f7d35',
@@ -226,11 +229,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    rowGap: 3,
+    rowGap: 4,
   },
   metaText: {
     color: '#deefd9',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   metaTextPhone: {

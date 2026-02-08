@@ -98,59 +98,52 @@ export function GameHud({
   awayDeckCount,
 }: GameHudProps) {
   const { width: viewportWidth } = useWindowDimensions();
-  const isWideDesktop = viewportWidth >= 1500;
-  const isDesktopTight = viewportWidth < 1320;
-  const isNarrow = viewportWidth < 1024;
-  const isPhone = viewportWidth < 620;
+  const isPhone = viewportWidth < 680;
+  const isTablet = viewportWidth >= 680 && viewportWidth < 1120;
 
   const connectionLabel = isRejoining ? 'REJOINING' : isConnected ? 'ONLINE' : 'OFFLINE';
   const prompt = resolvePrompt({ isRejoining, waitingForOpponent, phase, isMyTurn });
 
   return (
     <View style={[styles.container, isPhone && styles.containerPhone]}>
-      <View style={[styles.topRow, isNarrow && styles.topRowWrap, isPhone && styles.topRowPhone]}>
+      <View style={[styles.statusRow, isPhone && styles.statusRowPhone]}>
         <View
           style={[
             styles.connectionPill,
-            isDesktopTight && styles.connectionPillCompact,
-            isPhone && styles.connectionPillPhone,
             isConnected && !isRejoining ? styles.connectionOnline : styles.connectionOffline,
           ]}>
           <Text style={styles.connectionText}>{connectionLabel}</Text>
         </View>
 
-        <View style={[styles.scoreBlock, isNarrow && styles.scoreBlockNarrow]}>
-          <Text style={[styles.scoreText, isWideDesktop && styles.scoreTextWide, isDesktopTight && styles.scoreTextCompact]} numberOfLines={1}>
-            HOME {homeScore} - {awayScore} AWAY
-          </Text>
-        </View>
+        <Text style={styles.phaseBadge}>{formatPhase(phase)}</Text>
 
-        <View style={[styles.clockBlock, isDesktopTight && styles.clockBlockCompact, isPhone && styles.clockBlockPhone]}>
+        <View style={styles.clockBlock}>
           <Text style={styles.clockText}>Q{quarter} {formatClock(clockSeconds)}</Text>
           <Text style={styles.downText}>{formatDown(down)} & {toGo}</Text>
         </View>
       </View>
 
-      <View style={[styles.midRow, isNarrow && styles.midRowWrap]}>
-        <View style={[styles.statChip, isNarrow && styles.statChipNarrow, isPhone && styles.statChipPhone]}>
-          <Text style={styles.statLabel}>POSS</Text>
-          <Text style={styles.statValue}>{possession.toUpperCase()}</Text>
+      <View style={[styles.scoreboardRow, (isPhone || isTablet) && styles.scoreboardRowStack]}>
+        <View style={[styles.teamBlock, possession === 'home' && styles.teamBlockPossession]}>
+          <Text style={styles.teamLabel}>HOME</Text>
+          <Text style={styles.teamSub}>TO {homeTimeouts} / DECK {homeDeckCount}</Text>
         </View>
 
-        <View style={[styles.statChip, isNarrow && styles.statChipNarrow, isPhone && styles.statChipPhone]}>
-          <Text style={styles.statLabel}>HOME TO / DECK</Text>
-          <Text style={styles.statValue}>{homeTimeouts} / {homeDeckCount}</Text>
+        <View style={[styles.scoreBlock, isPhone && styles.scoreBlockPhone]}>
+          <Text style={[styles.scoreText, isPhone && styles.scoreTextPhone]}>
+            {homeScore} - {awayScore}
+          </Text>
+          <Text style={styles.scoreSub}>HOME vs AWAY</Text>
         </View>
 
-        <View style={[styles.statChip, isNarrow && styles.statChipNarrow, isPhone && styles.statChipPhone]}>
-          <Text style={styles.statLabel}>AWAY TO / DECK</Text>
-          <Text style={styles.statValue}>{awayTimeouts} / {awayDeckCount}</Text>
+        <View style={[styles.teamBlock, possession === 'away' && styles.teamBlockPossession]}>
+          <Text style={styles.teamLabel}>AWAY</Text>
+          <Text style={styles.teamSub}>TO {awayTimeouts} / DECK {awayDeckCount}</Text>
         </View>
       </View>
 
-      <View style={[styles.bottomRow, isPhone && styles.bottomRowPhone]}>
-        <Text style={styles.phaseBadge}>{formatPhase(phase)}</Text>
-        <Text style={[styles.promptText, isPhone && styles.promptTextPhone]}>{prompt}</Text>
+      <View style={styles.promptRow}>
+        <Text style={styles.promptText}>{prompt}</Text>
       </View>
     </View>
   );
@@ -159,8 +152,8 @@ export function GameHud({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    backgroundColor: '#1f2328',
-    borderBottomColor: '#3d434d',
+    backgroundColor: '#171b22',
+    borderBottomColor: '#34404e',
     borderBottomWidth: 2,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -170,31 +163,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  topRow: {
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
-  topRowWrap: {
+  statusRowPhone: {
     flexWrap: 'wrap',
-  },
-  topRowPhone: {
-    gap: 6,
   },
   connectionPill: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    minWidth: 92,
+    minWidth: 88,
     alignItems: 'center',
-  },
-  connectionPillCompact: {
-    minWidth: 84,
-  },
-  connectionPillPhone: {
-    minWidth: 78,
-    paddingHorizontal: 8,
   },
   connectionOnline: {
     backgroundColor: '#1f6e3d',
@@ -210,105 +194,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  scoreBlock: {
-    flex: 1,
-    backgroundColor: '#2a3038',
-    borderWidth: 1,
-    borderColor: '#4b515d',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  scoreBlockNarrow: {
-    minWidth: 220,
-  },
-  scoreText: {
-    color: '#f8fbff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  scoreTextWide: {
-    fontSize: 24,
-  },
-  scoreTextCompact: {
-    fontSize: 17,
-  },
-  clockBlock: {
-    minWidth: 132,
-    backgroundColor: '#2a3038',
-    borderWidth: 1,
-    borderColor: '#4b515d',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    alignItems: 'flex-end',
-  },
-  clockBlockCompact: {
-    minWidth: 112,
-  },
-  clockBlockPhone: {
-    minWidth: 96,
-  },
-  clockText: {
-    color: '#f4d03f',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  downText: {
-    color: '#d7e5d8',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  midRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  midRowWrap: {
-    flexWrap: 'wrap',
-  },
-  statChip: {
-    flex: 1,
-    backgroundColor: '#1a4b2a',
-    borderWidth: 1,
-    borderColor: '#2d7843',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  statChipNarrow: {
-    minWidth: 190,
-    flexGrow: 1,
-    flexShrink: 1,
-  },
-  statChipPhone: {
-    minWidth: 0,
-    width: '100%',
-  },
-  statLabel: {
-    color: '#bcd6bf',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  statValue: {
-    color: '#f5fff6',
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  bottomRowPhone: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
   phaseBadge: {
     color: '#1f1600',
     backgroundColor: '#f4d03f',
@@ -320,15 +205,104 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.4,
   },
-  promptText: {
-    flex: 1,
-    color: '#f2f7f2',
-    fontSize: 13,
-    fontWeight: '700',
+  clockBlock: {
+    backgroundColor: '#252d38',
+    borderWidth: 1,
+    borderColor: '#4b5666',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 118,
+    alignItems: 'flex-end',
   },
-  promptTextPhone: {
-    flex: 0,
-    width: '100%',
+  clockText: {
+    color: '#f4d03f',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  downText: {
+    color: '#d7e5d8',
     fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  scoreboardRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  scoreboardRowStack: {
+    flexDirection: 'column',
+  },
+  teamBlock: {
+    flex: 1,
+    backgroundColor: '#17472a',
+    borderWidth: 1,
+    borderColor: '#2f8550',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  teamBlockPossession: {
+    borderColor: '#f4d03f',
+    borderWidth: 2,
+  },
+  teamLabel: {
+    color: '#c7e6ca',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  teamSub: {
+    color: '#f2fff2',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  scoreBlock: {
+    minWidth: 220,
+    backgroundColor: '#232a34',
+    borderColor: '#4a5668',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scoreBlockPhone: {
+    minWidth: 0,
+    width: '100%',
+  },
+  scoreText: {
+    color: '#f7fbff',
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    lineHeight: 42,
+  },
+  scoreTextPhone: {
+    fontSize: 30,
+    lineHeight: 34,
+  },
+  scoreSub: {
+    color: '#b9c8db',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  promptRow: {
+    backgroundColor: '#1f2530',
+    borderWidth: 1,
+    borderColor: '#374150',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  promptText: {
+    color: '#edf5ee',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

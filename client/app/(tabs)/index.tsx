@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
@@ -198,6 +198,7 @@ interface InGameShellProps {
   possession: 'home' | 'away';
   isPhone: boolean;
   isCompactDesktop: boolean;
+  transientNotice: string | null;
 }
 
 function InGameShell({
@@ -208,6 +209,7 @@ function InGameShell({
   possession,
   isPhone,
   isCompactDesktop,
+  transientNotice,
 }: InGameShellProps) {
   const playContext = resolvePlayContext(gameState, isMyTurn);
 
@@ -217,6 +219,12 @@ function InGameShell({
         {matchMode === 'BOT' ? <Text style={styles.modeBadge}>BOT MATCH</Text> : <View />}
         <Text style={styles.roomBadge}>ROOM: {roomId ?? 'N/A'}</Text>
       </View>
+
+      {transientNotice && (
+        <View style={styles.transientNotice}>
+          <Text style={styles.transientNoticeText}>{transientNotice}</Text>
+        </View>
+      )}
 
       <View style={[styles.fieldFrame, isCompactDesktop && styles.fieldFrameCompact]}>
         <FieldView
@@ -277,6 +285,9 @@ export default function GameScreen() {
     playAgain,
   } = useGameSocket();
   const [roomInput, setRoomInput] = useState('TEST_ROOM');
+  const [gameplayNotice, setGameplayNotice] = useState<string | null>(null);
+  const gameplayNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastGameplayErrorRef = useRef<string | null>(null);
 
   const mySide = seat ?? (gameState?.myState.teamName === 'Away Team' ? 'away' : 'home');
   const possession = gameState?.field.possessionPlayerId === 'away' ? 'away' : 'home';
@@ -405,6 +416,35 @@ export default function GameScreen() {
 
   const isGameOver = gameState?.phase === 'GAME_OVER';
   const winner = homeScore === awayScore ? 'DRAW' : homeScore > awayScore ? 'HOME' : 'AWAY';
+  const isInGame = !!gameState;
+  const showJoinError = !!joinError && !isInGame;
+
+  useEffect(() => {
+    if (!isInGame || !joinError) {
+      return;
+    }
+    if (lastGameplayErrorRef.current === joinError) {
+      return;
+    }
+
+    lastGameplayErrorRef.current = joinError;
+    setGameplayNotice(joinError.replace(/_/g, ' '));
+
+    if (gameplayNoticeTimerRef.current) {
+      clearTimeout(gameplayNoticeTimerRef.current);
+    }
+    gameplayNoticeTimerRef.current = setTimeout(() => {
+      setGameplayNotice(null);
+    }, 2600);
+  }, [isInGame, joinError]);
+
+  useEffect(() => {
+    return () => {
+      if (gameplayNoticeTimerRef.current) {
+        clearTimeout(gameplayNoticeTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -427,66 +467,69 @@ export default function GameScreen() {
         awayDeckCount={awayDeckCount}
       />
 
-      <ScrollView
-        style={styles.playSurface}
-        contentContainerStyle={[
-          styles.playSurfaceContentWrap,
-          isShortSurface && styles.playSurfaceContentWrapShort,
-        ]}
-        showsVerticalScrollIndicator={!isPhone}
-        keyboardShouldPersistTaps="handled">
-        <View style={[styles.surfaceContent, isShortSurface && styles.surfaceContentShort]}>
-          {!gameState ? (
-            <LobbyShell
-              roomInput={roomInput}
-              onRoomInputChange={setRoomInput}
-              onQuickPlay={quickPlayBot}
-              onJoinRoom={joinSelectedRoom}
-              onCreateRoom={createRoom}
-              isConnected={isConnected}
+      <View style={styles.centerRegion}>
+        <ScrollView
+          style={styles.playSurface}
+          contentContainerStyle={[
+            styles.playSurfaceContentWrap,
+            isShortSurface && styles.playSurfaceContentWrapShort,
+          ]}
+          showsVerticalScrollIndicator={!isPhone}
+          keyboardShouldPersistTaps="handled">
+          <View style={[styles.surfaceContent, isShortSurface && styles.surfaceContentShort]}>
+            {!gameState ? (
+              <LobbyShell
+                roomInput={roomInput}
+                onRoomInputChange={setRoomInput}
+                onQuickPlay={quickPlayBot}
+                onJoinRoom={joinSelectedRoom}
+                onCreateRoom={createRoom}
+                isConnected={isConnected}
+                isPhone={isPhone}
+              />
+            ) : (
+              <InGameShell
+                gameState={gameState}
+                roomId={roomId}
+                matchMode={matchMode}
+                isMyTurn={isMyTurn}
+                possession={possession}
+                isPhone={isPhone}
+                isCompactDesktop={isCompactDesktop}
+                transientNotice={gameplayNotice}
+              />
+            )}
+          </View>
+
+          <View style={[styles.bannerStack, isPhone && styles.bannerStackPhone]}>
+            {isRejoining && (
+              <View style={styles.bannerInfo}>
+                <Text style={styles.bannerText}>Reconnecting...</Text>
+              </View>
+            )}
+            {!isRejoining && lastJoinWasRejoin && seat && (
+              <View style={styles.bannerInfo}>
+                <Text style={styles.bannerText}>Rejoined as {seat.toUpperCase()}</Text>
+              </View>
+            )}
+            {showJoinError && (
+              <View style={styles.bannerError}>
+                <Text style={styles.bannerText}>{joinError}</Text>
+              </View>
+            )}
+          </View>
+
+          {isGameOver && (
+            <GameOverShell
+              homeScore={homeScore}
+              awayScore={awayScore}
+              winner={winner}
+              onPlayAgain={playAgain}
               isPhone={isPhone}
             />
-          ) : (
-            <InGameShell
-              gameState={gameState}
-              roomId={roomId}
-              matchMode={matchMode}
-              isMyTurn={isMyTurn}
-              possession={possession}
-              isPhone={isPhone}
-              isCompactDesktop={isCompactDesktop}
-            />
           )}
-        </View>
-
-        <View style={[styles.bannerStack, isPhone && styles.bannerStackPhone]}>
-          {isRejoining && (
-            <View style={styles.bannerInfo}>
-              <Text style={styles.bannerText}>Reconnecting...</Text>
-            </View>
-          )}
-          {!isRejoining && lastJoinWasRejoin && seat && (
-            <View style={styles.bannerInfo}>
-              <Text style={styles.bannerText}>Rejoined as {seat.toUpperCase()}</Text>
-            </View>
-          )}
-          {joinError && (
-            <View style={styles.bannerError}>
-              <Text style={styles.bannerText}>{joinError}</Text>
-            </View>
-          )}
-        </View>
-
-        {isGameOver && (
-          <GameOverShell
-            homeScore={homeScore}
-            awayScore={awayScore}
-            winner={winner}
-            onPlayAgain={playAgain}
-            isPhone={isPhone}
-          />
-        )}
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       {gameState && (
         <PlayerHand
@@ -512,6 +555,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#245b29',
     position: 'relative',
   },
+  centerRegion: {
+    flex: 1,
+    width: '100%',
+  },
   playSurfaceContentWrap: {
     flexGrow: 1,
     alignItems: 'center',
@@ -524,7 +571,7 @@ const styles = StyleSheet.create({
   },
   surfaceContent: {
     width: '100%',
-    maxWidth: 1200,
+    maxWidth: 1320,
   },
   surfaceContentShort: {
     paddingTop: 8,
@@ -651,7 +698,7 @@ const styles = StyleSheet.create({
   },
   inGameTopRow: {
     width: '100%',
-    maxWidth: 1000,
+    maxWidth: 1100,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -679,9 +726,25 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'right',
   },
+  transientNotice: {
+    width: '100%',
+    maxWidth: 1100,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#b67a5a',
+    backgroundColor: 'rgba(109, 45, 34, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  transientNoticeText: {
+    color: '#ffe1d2',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   fieldFrame: {
     width: '100%',
-    maxWidth: 1050,
+    maxWidth: 1120,
     backgroundColor: 'rgba(12, 43, 18, 0.5)',
     borderRadius: 14,
     borderWidth: 1,
@@ -696,7 +759,7 @@ const styles = StyleSheet.create({
   },
   playContextPanel: {
     width: '100%',
-    maxWidth: 1050,
+    maxWidth: 1120,
     backgroundColor: 'rgba(4, 34, 14, 0.86)',
     borderColor: 'rgba(84, 149, 97, 0.62)',
     borderWidth: 1,
