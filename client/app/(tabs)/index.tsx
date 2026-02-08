@@ -92,7 +92,7 @@ export default function GameScreen() {
       <View style={styles.fieldArea}>
         {!gameState ? (
           <View style={styles.centerBox}>
-            <Text style={styles.title}>FootBored 5.1</Text>
+            <Text style={styles.title}>FootBored 6.0</Text>
             <Text style={styles.roomLabel}>Room Code</Text>
             <TextInput
               value={roomInput}

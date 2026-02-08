@@ -292,6 +292,6 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
 
   httpServer.listen(PORT, () => {
-    console.log(`\n🚀 FBG-5.1 Server listening on port ${PORT}`);
+    console.log(`\n🚀 FBG-6.0 Server listening on port ${PORT}`);
   });
 }

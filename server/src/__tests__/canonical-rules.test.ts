@@ -88,12 +88,12 @@ test('trick play and hail mary outcomes are deterministic from same seed state',
   assert.equal(HAIL_MARY_OUTCOME_TABLE.length, 6);
 });
 
-test('open rules throw explicit guardrail errors', () => {
+test('remaining non-implemented rules throw explicit guardrail errors', () => {
   assert.throws(
-    () => assertRuleImplemented('R-SAME-003'),
+    () => assertRuleImplemented('R-KICK-001'),
     (error: unknown) => {
       assert(error instanceof RuleNotImplementedError);
-      assert.equal((error as RuleNotImplementedError).ruleId, 'R-SAME-003');
+      assert.equal((error as RuleNotImplementedError).ruleId, 'R-KICK-001');
       return true;
     }
   );

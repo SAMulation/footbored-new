@@ -42,6 +42,11 @@ export interface PlayResult {
   multiplierCard: string;
   yardCard: number;
   message: string;
+  flags?: {
+    defPenalty?: boolean;
+    zeroSecondPlay?: boolean;
+    kickoffTouchback?: boolean;
+  };
 }
 
 export interface PlayerState {
@@ -65,6 +70,9 @@ export interface FieldState {
   toGo: number;
   quarter: number;
   clockSeconds: number;
+  isOvertime: boolean;
+  overtimePeriod: number | null;
+  awaitingZeroSecondPlay: boolean;
 }
 
 export interface ServerGameState {

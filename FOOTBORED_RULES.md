@@ -88,11 +88,11 @@ This document:
 **Implementation Gate:** Approved for coding.
 
 **Rule ID:** `R-DECK-005`  
-**Canonical Statement:** Overtime `HM` and `TO` refresh cadence is `OPEN` and MUST be confirmed before coding final behavior.  
+**Canonical Statement:** Overtime uses college-style possessions with one `HM` refresh per OT period, no timeout refresh dependency, and OT stage progression (`OT1-2` normal start at 25, `OT3-4` mandatory 2-point context, `OT5+` 2-point shootout only).  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** One source says "2 HM per OT period"; another indicates "2 HM + 1 TO per every two OT periods."  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Conflicting legacy wording resolved by explicit implementation choice for current prototype.  
+**Implementation Gate:** Implemented.
 
 ### Standard Play Quality Matrix
 **Rule ID:** `R-STD-001`  
@@ -143,11 +143,11 @@ This document:
 ```
 
 **Rule ID:** `R-MULT-002`  
-**Canonical Statement:** Yardage calculation for normal standard plays MUST be `yards = YardCard(0..10) * Multiplier`, then converted to integer yards by a confirmed rounding rule.  
+**Canonical Statement:** Yardage calculation for normal standard plays MUST be `yards = YardCard(0..10) * Multiplier`, converted to integer yards by away-from-zero rounding (`ceil` positive, `floor` negative).  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `LIKELY`  
-**Conflict Notes:** Integer rounding policy is not explicitly fixed by board text.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Board text does not pin exact rounding semantics; implementation now pins one deterministic policy.  
+**Implementation Gate:** Implemented.
 
 ### Same Play Mechanism
 **Rule ID:** `R-SAME-001`  
@@ -169,11 +169,11 @@ This document:
 **Implementation Gate:** Approved for coding.
 
 **Rule ID:** `R-SAME-003`  
-**Canonical Statement:** Non-trigger behavior (first coin tails) is `OPEN`; implementation MUST NOT silently choose fallback behavior without confirmation.  
+**Canonical Statement:** Non-trigger behavior for same-play coin check falls back to normal matrix + multiplier resolution.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Common interpretation is normal matrix fallback, but this is not explicitly pinned in board text.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Board text ambiguity resolved with explicit fallback policy for deterministic implementation.  
+**Implementation Gate:** Implemented.
 
 ### Big Play Outcomes
 **Rule ID:** `R-BIG-001`  
@@ -206,18 +206,18 @@ This document:
 **Implementation Gate:** Approved for coding on outcomes; integration details still gated.
 
 **Rule ID:** `R-TP-002`  
-**Canonical Statement:** Whether the `-15` Trick penalty repeats the down is `OPEN`.  
+**Canonical Statement:** Trick `-15` own-penalty is side-specific: offense TP penalty consumes the down; defense TP penalty grants offense auto first down.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Some descriptions imply repeat-down handling; explicit wording is missing.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Legacy wording ambiguity resolved with explicit side-specific handling.  
+**Implementation Gate:** Implemented.
 
 **Rule ID:** `R-TP-003`  
-**Canonical Statement:** Precise interaction between `TP` outcomes and defense call/matrix path is `OPEN` where not explicitly stated.  
+**Canonical Statement:** TP outcomes are table-driven and ignore defense call for outcome math; defense card is returned unless both sides play TP, which uses a same-play TP profile.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Multiple plausible implementations exist.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Multiple plausible interpretations existed; current implementation locks one deterministic profile.  
+**Implementation Gate:** Implemented.
 
 ### Hail Mary (`HM`)
 **Rule ID:** `R-HM-001`  
@@ -250,18 +250,18 @@ This document:
 **Implementation Gate:** Approved for coding.
 
 **Rule ID:** `R-FLD-003`  
-**Canonical Statement:** Safety behavior is `OPEN` where not explicitly pinned by source text.  
+**Canonical Statement:** Safety awards 2 points to defense and uses prototype free-kick reset (midfield, scoring team receiving) in regulation flow.  
 **Sources:** `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Not clearly resolved in available board evidence.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Board evidence is limited; prototype adopts explicit safety semantics.  
+**Implementation Gate:** Implemented.
 
 **Rule ID:** `R-FLD-004`  
-**Canonical Statement:** Internal coordinate system choice (for example offense-always-to-100 versus absolute orientation) is an implementation detail and remains `OPEN`; whichever model is chosen MUST preserve canonical football outcomes exactly.  
+**Canonical Statement:** Engine uses offense-forward internal coordinates with adapter back to absolute `0..100` field state for clients.  
 **Sources:** `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** This is not a board rule; it is an engine modeling decision.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** This remains an engine-model choice rather than a board rule.  
+**Implementation Gate:** Implemented.
 
 ### Clock, Periods, and Timeouts (`TO`)
 **Rule ID:** `R-CLK-001`  
@@ -436,6 +436,9 @@ These prototype behaviors MUST be treated as temporary implementation state, not
 - **2026-02-08:** Locked canonical matrix and multiplier values from highest-confidence available sources.
 - **2026-02-08:** Prohibited silent fallback to current prototype behavior when canonical evidence is incomplete.
 - **2026-02-08:** Chose one-file canonical rules documentation format for long-term reference.
+- **2026-02-08:** Locked OPEN resolution policies for rounding, same-play fallback, TP handling, safety semantics, and offense-forward coordinate modeling.
+- **2026-02-08:** Adopted college-style overtime staging for prototype (`OT1-2` normal, `OT3-4` mandatory conversion context, `OT5+` shootout).
 
 ## Change Log
 - **2026-02-08:** Initial creation of canonical rules reference (`v1.0` baseline).
+- **2026-02-08:** Promoted `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, and `R-FLD-004` from OPEN to IMPLEMENTED.

@@ -3,6 +3,7 @@ import { GAME_CONFIG } from '../../shared/constants';
 import { Deck } from './models/Deck';
 import { Hand } from './models/Hand';
 import {
+  COLLEGE_OVERTIME_CONFIG,
   HAIL_MARY_OUTCOME_TABLE,
   HailMaryOutcomeCode,
   MULTIPLIER_SEQUENCE,
@@ -25,6 +26,11 @@ export interface SubmitMoveResult {
   reason?: string;
 }
 
+interface MatchupFlags {
+  defPenalty?: boolean;
+  kickoffTouchback?: boolean;
+}
+
 interface MatchupResult {
   delta: number;
   yards: number;
@@ -37,9 +43,25 @@ interface MatchupResult {
   fieldGoalAttempt?: boolean;
   multiplierCard?: string;
   yardCard?: number;
+  flags?: MatchupFlags;
+  autoFirstDown?: boolean;
+}
+
+interface BallResolution {
+  touchdown: boolean;
+  safety: boolean;
+}
+
+interface SamePlayOverrides {
+  yards?: number;
+  forceTurnover?: boolean;
+  noDownProgress?: boolean;
+  autoFirstDown?: boolean;
+  message?: string;
 }
 
 const FIELD_GOAL_POINTS = 3;
+const SAFETY_POINTS = 2;
 const PLAY_CLOCK_TICK_SECONDS = 30;
 const QUARTER_SECONDS = 900;
 const MIDFIELD_SPOT = 50;
@@ -54,7 +76,7 @@ export class RuleNotImplementedError extends Error {
 
 export function assertRuleImplemented(ruleId: string) {
   if (OPEN_RULE_IDS.includes(ruleId as (typeof OPEN_RULE_IDS)[number])) {
-    throw new RuleNotImplementedError(ruleId, `Rule ${ruleId} is marked OPEN in FOOTBORED_RULES.md`);
+    throw new RuleNotImplementedError(ruleId, `Rule ${ruleId} is still OPEN in FOOTBORED_RULES.md`);
   }
 }
 
@@ -71,6 +93,14 @@ function hashToIndex(seed: string, max: number): number {
   return Math.abs(hash >>> 0) % max;
 }
 
+function roundAwayFromZero(value: number): number {
+  return value >= 0 ? Math.ceil(value) : Math.floor(value);
+}
+
+export function roundYardsForPlay(value: number): number {
+  return roundAwayFromZero(value);
+}
+
 export class GameEngine {
   state: ServerGameState;
 
@@ -79,7 +109,12 @@ export class GameEngine {
   private handHome = new Hand();
   private handAway = new Hand();
 
+  private overtimeCoinWinner: TeamSide;
+  private overtimePossessionsCompleted = 0;
+
   constructor(roomId: string) {
+    this.overtimeCoinWinner = hashToIndex(`${roomId}|ot-coin`, 2) === 0 ? 'home' : 'away';
+
     this.state = {
       roomId,
       phase: GamePhase.LOBBY,
@@ -94,6 +129,9 @@ export class GameEngine {
         toGo: 10,
         quarter: 1,
         clockSeconds: QUARTER_SECONDS,
+        isOvertime: false,
+        overtimePeriod: null,
+        awaitingZeroSecondPlay: false,
       },
       pendingMove: {},
     };
@@ -125,6 +163,21 @@ export class GameEngine {
       return { accepted: false, resolved: false, reason: 'already_submitted' };
     }
 
+    if (isOffense) {
+      const offenseCard = this.state.players[side].hand.find((card) => card.id === cardId);
+      if (!offenseCard) {
+        return { accepted: false, resolved: false, reason: 'card_not_in_hand' };
+      }
+
+      if (offenseCard.type === 'HM' && this.state.players[side].hailMaryCount <= 0) {
+        return { accepted: false, resolved: false, reason: 'hail_mary_exhausted' };
+      }
+
+      if (this.isShootoutOvertime() && ['HM', 'TP', 'PT', 'FG'].includes(offenseCard.type)) {
+        return { accepted: false, resolved: false, reason: 'shootout_restriction' };
+      }
+    }
+
     this.state.pendingMove[slot] = cardId;
 
     if (this.state.pendingMove.offenseCardId && this.state.pendingMove.defenseCardId) {
@@ -140,7 +193,7 @@ export class GameEngine {
       return;
     }
 
-    if (this.state.field.quarter >= 4 && this.state.field.clockSeconds <= 0) {
+    if (!this.state.field.isOvertime && this.state.field.quarter >= 4 && this.state.field.clockSeconds <= 0 && !this.state.field.awaitingZeroSecondPlay) {
       this.state.phase = GamePhase.GAME_OVER;
       return;
     }
@@ -164,10 +217,15 @@ export class GameEngine {
       toGo: 10,
       quarter: 1,
       clockSeconds: QUARTER_SECONDS,
+      isOvertime: false,
+      overtimePeriod: null,
+      awaitingZeroSecondPlay: false,
     };
+
     this.state.pendingMove = {};
     this.state.lastPlay = undefined;
     this.state.phase = GamePhase.LOBBY;
+    this.overtimePossessionsCompleted = 0;
 
     this.state.players.home = {
       ...this.createPlayer('Home Team'),
@@ -198,25 +256,11 @@ export class GameEngine {
       return;
     }
 
-    let outcome: MatchupResult;
-    try {
-      outcome = this.evaluateMatchup(offenseCard, defenseCard, offenseSide);
-    } catch (error) {
-      if (error instanceof RuleNotImplementedError) {
-        outcome = {
-          delta: 0,
-          yards: 0,
-          message: `OPEN RULE BLOCKED (${error.ruleId}): ${error.message}`,
-          keepOffenseCard: true,
-          keepDefenseCard: true,
-          noDownProgress: true,
-          multiplierCard: 'OPEN',
-          yardCard: 0,
-        };
-      } else {
-        throw error;
-      }
+    if (offenseCard.type === 'HM') {
+      this.state.players[offenseSide].hailMaryCount = Math.max(0, this.state.players[offenseSide].hailMaryCount - 1);
     }
+
+    const outcome = this.evaluateMatchup(offenseCard, defenseCard, offenseSide, defenseSide);
 
     if (outcome.keepOffenseCard) {
       offenseHand.returnCardToHand(offenseCard);
@@ -225,25 +269,53 @@ export class GameEngine {
       defenseHand.returnCardToHand(defenseCard);
     }
 
-    const isTouchdown = this.applyBallAndPossession(outcome.yards, offenseSide, outcome);
-    const isTurnover = outcome.forceTurnover || this.applyDownAndDistance(offenseSide, outcome, isTouchdown);
+    let ballResolution: BallResolution = { touchdown: false, safety: false };
+    let isTurnover = false;
+    let shootoutConverted = false;
 
-    if (!outcome.noClockTick) {
-      this.tickGameClock();
+    if (this.isShootoutOvertime()) {
+      if (outcome.yards > 0) {
+        this.state.players[offenseSide].score += 2;
+        shootoutConverted = true;
+      }
+    } else {
+      ballResolution = this.applyBallAndPossession(outcome.yards, offenseSide, outcome);
+      isTurnover = outcome.forceTurnover || this.applyDownAndDistance(offenseSide, outcome, ballResolution.touchdown, ballResolution.safety);
     }
+
+    const zeroSecondPlay = !outcome.noClockTick && !this.state.field.isOvertime
+      ? this.tickGameClock(outcome.flags)
+      : false;
 
     this.state.lastPlay = {
       playCalled: offenseCard,
       defenseCalled: defenseCard,
       delta: outcome.delta,
       yardsGained: outcome.yards,
-      isTouchdown,
+      isTouchdown: ballResolution.touchdown,
       isTurnover,
-      isSafety: false,
+      isSafety: ballResolution.safety,
       multiplierCard: outcome.multiplierCard ?? 'N/A',
       yardCard: outcome.yardCard ?? Math.abs(outcome.yards),
-      message: outcome.message,
+      message: shootoutConverted
+        ? `${outcome.message} Two-point conversion good.`
+        : outcome.message,
+      flags: {
+        defPenalty: outcome.flags?.defPenalty,
+        zeroSecondPlay,
+        kickoffTouchback: outcome.flags?.kickoffTouchback,
+      },
     };
+
+    const possessionEnded = this.isShootoutOvertime()
+      || ballResolution.touchdown
+      || ballResolution.safety
+      || isTurnover
+      || !!outcome.fieldGoalAttempt;
+
+    if (this.state.field.isOvertime && possessionEnded) {
+      this.finishOvertimePossession(offenseSide);
+    }
 
     offenseHand.refill(this.getDeckForSide(offenseSide));
     defenseHand.refill(this.getDeckForSide(defenseSide));
@@ -255,10 +327,11 @@ export class GameEngine {
     }
   }
 
-  private evaluateMatchup(offenseCard: Card, defenseCard: Card, offenseSide: TeamSide): MatchupResult {
-    const { ballOn, down } = this.state.field;
+  private evaluateMatchup(offenseCard: Card, defenseCard: Card, offenseSide: TeamSide, defenseSide: TeamSide): MatchupResult {
+    const turnSeed = this.createTurnSeed(offenseCard.type, defenseCard.type);
 
     if (offenseCard.type === 'TO') {
+      this.state.players[offenseSide].timeouts = Math.max(0, this.state.players[offenseSide].timeouts - 1);
       return {
         delta: 0,
         yards: 0,
@@ -273,7 +346,7 @@ export class GameEngine {
     }
 
     if (offenseCard.type === 'PT') {
-      if (down !== 4) {
+      if (this.state.field.down !== 4 && !this.state.field.isOvertime) {
         return {
           delta: -2,
           yards: 0,
@@ -298,15 +371,18 @@ export class GameEngine {
     }
 
     if (offenseCard.type === 'FG') {
-      const distance = offenseSide === 'home' ? 100 - ballOn : ballOn;
-      const defensePenalty = ['TP', 'HM'].includes(defenseCard.type) ? 5 : 0;
+      const forwardBall = this.toForwardBall(this.state.field.ballOn, offenseSide);
+      const distance = Math.max(0, 100 - forwardBall);
+      const defensePenalty = defenseCard.type === 'TO' ? 0 : 5;
       const kickDifficulty = Math.max(0, distance - 35);
       const kickScore = 70 - kickDifficulty - defensePenalty;
       const made = kickScore >= 45;
 
       if (made) {
         this.state.players[offenseSide].score += FIELD_GOAL_POINTS;
-        this.resetForKickoff(this.getOpponentSide(offenseSide));
+        if (!this.state.field.isOvertime) {
+          this.resetForKickoff(this.getOpponentSide(offenseSide));
+        }
         return {
           delta: 1,
           yards: 0,
@@ -324,28 +400,58 @@ export class GameEngine {
         message: `Field goal missed from ${distance} yards.`,
         forceTurnover: true,
         noDownProgress: true,
+        fieldGoalAttempt: true,
         multiplierCard: 'FG',
         yardCard: 0,
       };
     }
 
-    const turnSeed = this.createTurnSeed(offenseCard.type, defenseCard.type);
+    if (offenseCard.type === 'TP' && defenseCard.type === 'TP') {
+      return this.resolveTpSamePlay(turnSeed);
+    }
 
     if (offenseCard.type === 'TP') {
-      return this.resolveTrickPlay(turnSeed);
+      const trick = this.resolveTrickPlay(turnSeed);
+      trick.keepDefenseCard = true;
+      return trick;
+    }
+
+    if (defenseCard.type === 'TP') {
+      const defPenalty = hashToIndex(`${turnSeed}|def-tp-pen`, 6) === 0;
+      if (defPenalty) {
+        return {
+          delta: 2,
+          yards: 15,
+          message: 'Defense trick penalty: auto first down for offense.',
+          keepDefenseCard: true,
+          noDownProgress: true,
+          autoFirstDown: true,
+          multiplierCard: 'TP',
+          yardCard: 15,
+          flags: { defPenalty: true },
+        };
+      }
     }
 
     if (offenseCard.type === 'HM') {
-      return this.resolveHailMary(turnSeed);
+      const hm = this.resolveHailMary(turnSeed);
+      if (defenseCard.type === 'TP') {
+        hm.keepDefenseCard = true;
+      }
+      return hm;
     }
 
     if (isStandardPlay(offenseCard.type) && isStandardPlay(defenseCard.type)) {
-      return this.resolveStandardPlay(offenseCard.type, defenseCard.type, turnSeed);
+      return this.resolveStandardPlay(offenseCard.type, defenseCard.type, turnSeed, offenseSide, defenseSide);
     }
 
-    // Standard offense against non-standard defense defaults to neutral quality.
     if (isStandardPlay(offenseCard.type)) {
-      return this.resolveStandardPlay(offenseCard.type, offenseCard.type, `${turnSeed}|fallback`);
+      const defenseForResolution: StandardPlayType = defenseCard.type === 'TP' ? offenseCard.type : offenseCard.type;
+      const result = this.resolveStandardPlay(offenseCard.type, defenseForResolution, `${turnSeed}|fallback`, offenseSide, defenseSide);
+      if (defenseCard.type === 'TP') {
+        result.keepDefenseCard = true;
+      }
+      return result;
     }
 
     return {
@@ -357,51 +463,156 @@ export class GameEngine {
     };
   }
 
-  private resolveStandardPlay(offense: StandardPlayType, defense: StandardPlayType, seed: string): MatchupResult {
+  private resolveStandardPlay(
+    offense: StandardPlayType,
+    defense: StandardPlayType,
+    seed: string,
+    offenseSide: TeamSide,
+    defenseSide: TeamSide
+  ): MatchupResult {
     const quality = STANDARD_QUALITY_MATRIX[offense][defense];
     const multiplierCard = MULTIPLIER_SEQUENCE[hashToIndex(`${seed}|mult`, MULTIPLIER_SEQUENCE.length)];
     const multiplier = MULTIPLIER_TABLE[multiplierCard][quality];
+    const yardCard = YARD_CARD_SEQUENCE[hashToIndex(`${seed}|yard`, YARD_CARD_SEQUENCE.length)];
+    const baseYards = roundAwayFromZero(yardCard * multiplier);
 
-    let yardCard = YARD_CARD_SEQUENCE[hashToIndex(`${seed}|yard`, YARD_CARD_SEQUENCE.length)];
-    if (!Number.isInteger(yardCard * multiplier) && yardCard % 2 !== 0) {
-      yardCard = (yardCard + 1) % YARD_CARD_SEQUENCE.length;
-    }
-
-    if (!Number.isInteger(yardCard * multiplier)) {
-      assertRuleImplemented('R-MULT-002');
-    }
-
-    let yards = yardCard * multiplier;
-    let forceTurnover = false;
+    const result: MatchupResult = {
+      delta: QUALITY_DELTA[quality],
+      yards: baseYards,
+      message: `${offense} vs ${defense} -> ${quality} (${multiplierCard}) for ${baseYards >= 0 ? '+' : ''}${baseYards} yards.`,
+      multiplierCard,
+      yardCard,
+    };
 
     if (offense === defense) {
-      const branchFlip = hashToIndex(`${seed}|same-branch`, 2) === 1;
-      if (multiplierCard === 'K') {
-        if (branchFlip) {
-          yards = 25;
-        } else {
-          yards = -10;
-          forceTurnover = true;
-        }
-      } else if (multiplierCard === 'Q') {
-        yards = branchFlip ? yards * 3 : 0;
-      } else if (multiplierCard === 'J') {
-        yards = branchFlip ? 0 : yards * -3;
-      } else {
-        if (branchFlip) {
-          forceTurnover = true;
-        }
-        yards = 0;
+      const triggered = hashToIndex(`${seed}|same-trigger`, 2) === 1;
+      if (!triggered) {
+        result.message = `${result.message} Same-play branch did not trigger; fallback to normal matrix.`;
+        return result;
       }
+
+      const favorOffense = hashToIndex(`${seed}|same-favor`, 2) === 1;
+      const sameOverrides = this.resolveSamePlayBranch(multiplierCard, baseYards, seed, favorOffense, offenseSide, defenseSide);
+      result.yards = sameOverrides.yards ?? result.yards;
+      result.forceTurnover = sameOverrides.forceTurnover;
+      result.noDownProgress = sameOverrides.noDownProgress;
+      result.autoFirstDown = sameOverrides.autoFirstDown;
+      result.message = sameOverrides.message ?? result.message;
+    }
+
+    return result;
+  }
+
+  private resolveSamePlayBranch(
+    multiplierCard: typeof MULTIPLIER_SEQUENCE[number],
+    baseYards: number,
+    seed: string,
+    favorOffense: boolean,
+    offenseSide: TeamSide,
+    defenseSide: TeamSide
+  ): SamePlayOverrides {
+    const branchCoin = hashToIndex(`${seed}|same-branch`, 2) === 1;
+
+    if (favorOffense) {
+      if (multiplierCard === 'K') {
+        return {
+          yards: this.getOffenseBigPlayYards(offenseSide),
+          message: 'Same-play offense-favorable K: offense big play.',
+        };
+      }
+      if (multiplierCard === 'Q') {
+        return {
+          yards: baseYards * 3,
+          message: 'Same-play offense-favorable Q: x3.',
+        };
+      }
+      if (multiplierCard === 'J') {
+        return {
+          yards: 0,
+          message: 'Same-play offense-favorable J: x0.',
+        };
+      }
+
+      if (branchCoin) {
+        return {
+          yards: 0,
+          forceTurnover: true,
+          noDownProgress: true,
+          message: 'Same-play offense-favorable 10: turnover at line of scrimmage.',
+        };
+      }
+
+      return {
+        yards: 0,
+        message: 'Same-play offense-favorable 10: x0.',
+      };
+    }
+
+    if (multiplierCard === 'K') {
+      if (branchCoin) {
+        return {
+          yards: this.getOffenseBigPlayYards(offenseSide),
+          message: 'Same-play defense-favorable K coin: offense big play.',
+        };
+      }
+      return {
+        yards: this.getDefenseBigPlayYards(defenseSide),
+        noDownProgress: true,
+        message: 'Same-play defense-favorable K coin: defense big play.',
+      };
+    }
+
+    if (multiplierCard === 'Q') {
+      return {
+        yards: 0,
+        message: 'Same-play defense-favorable Q: x0.',
+      };
+    }
+
+    if (multiplierCard === 'J') {
+      return {
+        yards: baseYards * -3,
+        message: 'Same-play defense-favorable J: x-3.',
+      };
     }
 
     return {
-      delta: QUALITY_DELTA[quality],
-      yards,
-      forceTurnover,
-      message: `${offense} vs ${defense} -> ${quality} (${multiplierCard}) for ${yards >= 0 ? '+' : ''}${yards} yards.`,
-      multiplierCard,
-      yardCard,
+      yards: this.getDefenseBigPlayYards(defenseSide),
+      noDownProgress: true,
+      message: 'Same-play defense-favorable 10: defense big play.',
+    };
+  }
+
+  private getOffenseBigPlayYards(offenseSide: TeamSide): number {
+    const forwardBall = this.toForwardBall(this.state.field.ballOn, offenseSide);
+    const distanceToEndZone = Math.max(0, 100 - forwardBall);
+    return Math.max(25, Math.max(40, Math.ceil(distanceToEndZone / 2)));
+  }
+
+  private getDefenseBigPlayYards(_defenseSide: TeamSide): number {
+    return -10;
+  }
+
+  private resolveTpSamePlay(seed: string): MatchupResult {
+    const base = this.resolveStandardPlay('SP', 'SP', `${seed}|tp-profile`, 'home', 'away');
+    const overrides = this.resolveSamePlayBranch(
+      MULTIPLIER_SEQUENCE[hashToIndex(`${seed}|tp-mult`, MULTIPLIER_SEQUENCE.length)],
+      base.yards,
+      `${seed}|tp-same`,
+      hashToIndex(`${seed}|tp-favor`, 2) === 1,
+      this.getOffenseSide(),
+      this.getDefenseSide()
+    );
+
+    return {
+      delta: base.delta,
+      yards: overrides.yards ?? base.yards,
+      forceTurnover: overrides.forceTurnover,
+      noDownProgress: overrides.noDownProgress,
+      autoFirstDown: overrides.autoFirstDown,
+      message: overrides.message ?? 'TP vs TP resolved via same-play TP profile.',
+      multiplierCard: 'TP',
+      yardCard: Math.abs(overrides.yards ?? base.yards),
     };
   }
 
@@ -411,10 +622,6 @@ export class GameEngine {
   }
 
   private resolveTrickOutcome(outcome: TrickPlayOutcomeCode): MatchupResult {
-    if (outcome === 'OWN_PENALTY_15') {
-      assertRuleImplemented('R-TP-002');
-    }
-
     if (outcome === 'LR_PLUS_5') {
       return {
         delta: 2,
@@ -452,6 +659,16 @@ export class GameEngine {
         message: 'Trick play blown up: -3x outcome.',
         multiplierCard: 'TP',
         yardCard: 12,
+      };
+    }
+
+    if (outcome === 'OWN_PENALTY_15') {
+      return {
+        delta: -2,
+        yards: -15,
+        message: 'Trick play own-penalty: -15 and loss of down.',
+        multiplierCard: 'TP',
+        yardCard: 15,
       };
     }
 
@@ -531,7 +748,7 @@ export class GameEngine {
   }
 
   private createTurnSeed(offenseType: PlayType, defenseType: PlayType): string {
-    const { quarter, clockSeconds, down, toGo, ballOn } = this.state.field;
+    const { quarter, clockSeconds, down, toGo, ballOn, overtimePeriod } = this.state.field;
     return [
       this.state.roomId,
       quarter,
@@ -539,39 +756,57 @@ export class GameEngine {
       down,
       toGo,
       ballOn,
+      overtimePeriod ?? 0,
       offenseType,
       defenseType,
     ].join('|');
   }
 
-  private applyBallAndPossession(yards: number, offenseSide: TeamSide, outcome: MatchupResult): boolean {
-    if (outcome.fieldGoalAttempt || offenseSide !== this.getOffenseSide()) {
-      return false;
-    }
-
-    const direction = offenseSide === 'home' ? 1 : -1;
-    const signedYards = yards * direction;
-
-    this.state.field.ballOn += signedYards;
-
-    if (offenseSide === 'home' && this.state.field.ballOn >= 100) {
-      this.state.players.home.score += GAME_CONFIG.TOUCHDOWN_POINTS;
-      this.resetForKickoff('away');
-      return true;
-    }
-
-    if (offenseSide === 'away' && this.state.field.ballOn <= 0) {
-      this.state.players.away.score += GAME_CONFIG.TOUCHDOWN_POINTS;
-      this.resetForKickoff('home');
-      return true;
-    }
-
-    this.state.field.ballOn = Math.max(0, Math.min(100, this.state.field.ballOn));
-    return false;
+  private toForwardBall(ballOn: number, offenseSide: TeamSide): number {
+    return offenseSide === 'home' ? ballOn : 100 - ballOn;
   }
 
-  private applyDownAndDistance(offenseSide: TeamSide, outcome: MatchupResult, isTouchdown: boolean): boolean {
-    if (isTouchdown || outcome.noDownProgress) {
+  private fromForwardBall(forwardBall: number, offenseSide: TeamSide): number {
+    return offenseSide === 'home' ? forwardBall : 100 - forwardBall;
+  }
+
+  private applyBallAndPossession(yards: number, offenseSide: TeamSide, outcome: MatchupResult): BallResolution {
+    if (outcome.fieldGoalAttempt || offenseSide !== this.getOffenseSide()) {
+      return { touchdown: false, safety: false };
+    }
+
+    const currentForwardBall = this.toForwardBall(this.state.field.ballOn, offenseSide);
+    const nextForwardBall = currentForwardBall + yards;
+
+    if (nextForwardBall >= 100) {
+      this.state.players[offenseSide].score += GAME_CONFIG.TOUCHDOWN_POINTS;
+      if (!this.state.field.isOvertime) {
+        this.resetForKickoff(this.getOpponentSide(offenseSide));
+      }
+      return { touchdown: true, safety: false };
+    }
+
+    if (nextForwardBall < 0) {
+      const defenseSide = this.getOpponentSide(offenseSide);
+      this.state.players[defenseSide].score += SAFETY_POINTS;
+      if (!this.state.field.isOvertime) {
+        this.resetForKickoff(defenseSide);
+      }
+      return { touchdown: false, safety: true };
+    }
+
+    const boundedForward = Math.max(0, Math.min(100, nextForwardBall));
+    this.state.field.ballOn = this.fromForwardBall(boundedForward, offenseSide);
+    return { touchdown: false, safety: false };
+  }
+
+  private applyDownAndDistance(offenseSide: TeamSide, outcome: MatchupResult, isTouchdown: boolean, isSafety: boolean): boolean {
+    if (isTouchdown || isSafety || outcome.noDownProgress) {
+      if (outcome.autoFirstDown) {
+        this.state.field.down = 1;
+        this.state.field.toGo = 10;
+      }
+
       if (outcome.forceTurnover) {
         this.flipPossession();
         return true;
@@ -601,21 +836,90 @@ export class GameEngine {
     return false;
   }
 
-  private tickGameClock() {
+  private tickGameClock(flags?: MatchupFlags): boolean {
+    if (this.state.field.isOvertime) {
+      return false;
+    }
+
+    if (this.state.field.awaitingZeroSecondPlay) {
+      const extended = !!flags?.defPenalty || !!flags?.kickoffTouchback;
+      if (!extended) {
+        this.state.field.awaitingZeroSecondPlay = false;
+        this.handleEndOfPeriod();
+      }
+      return true;
+    }
+
     this.state.field.clockSeconds -= PLAY_CLOCK_TICK_SECONDS;
 
     if (this.state.field.clockSeconds > 0) {
-      return;
+      return false;
     }
 
+    this.state.field.clockSeconds = 0;
+    this.state.field.awaitingZeroSecondPlay = true;
+    return false;
+  }
+
+  private handleEndOfPeriod() {
     if (this.state.field.quarter < 4) {
       this.state.field.quarter += 1;
       this.state.field.clockSeconds = QUARTER_SECONDS;
       return;
     }
 
+    if (this.state.players.home.score !== this.state.players.away.score) {
+      this.state.phase = GamePhase.GAME_OVER;
+      return;
+    }
+
+    this.enterOvertimePeriod(1);
+  }
+
+  private enterOvertimePeriod(period: number) {
+    this.state.field.isOvertime = true;
+    this.state.field.overtimePeriod = period;
+    this.state.field.quarter = 4 + period;
     this.state.field.clockSeconds = 0;
-    this.state.phase = GamePhase.GAME_OVER;
+    this.state.field.awaitingZeroSecondPlay = false;
+
+    this.state.players.home.hailMaryCount += 1;
+    this.state.players.away.hailMaryCount += 1;
+
+    this.overtimePossessionsCompleted = 0;
+    const firstOffense = period % 2 === 1 ? this.overtimeCoinWinner : this.getOpponentSide(this.overtimeCoinWinner);
+    this.prepareOvertimePossession(firstOffense);
+  }
+
+  private prepareOvertimePossession(offenseSide: TeamSide) {
+    const period = this.state.field.overtimePeriod ?? 1;
+    const isShootout = period >= 5;
+    const startSpot = isShootout ? COLLEGE_OVERTIME_CONFIG.shootoutSpot : COLLEGE_OVERTIME_CONFIG.startSpot;
+
+    this.state.field.possessionPlayerId = offenseSide;
+    this.state.field.ballOn = offenseSide === 'home' ? 100 - startSpot : startSpot;
+    this.state.field.down = 1;
+    this.state.field.toGo = isShootout ? COLLEGE_OVERTIME_CONFIG.shootoutSpot : 10;
+  }
+
+  private finishOvertimePossession(offenseSide: TeamSide) {
+    this.overtimePossessionsCompleted += 1;
+
+    if (this.overtimePossessionsCompleted === 1) {
+      this.prepareOvertimePossession(this.getOpponentSide(offenseSide));
+      return;
+    }
+
+    if (this.state.players.home.score !== this.state.players.away.score) {
+      this.state.phase = GamePhase.GAME_OVER;
+      return;
+    }
+
+    this.enterOvertimePeriod((this.state.field.overtimePeriod ?? 1) + 1);
+  }
+
+  private isShootoutOvertime() {
+    return this.state.field.isOvertime && (this.state.field.overtimePeriod ?? 0) >= 5;
   }
 
   private flipPossession() {
@@ -691,7 +995,7 @@ export function resolvePlayMatchup(offType: PlayType, defType: PlayType): { delt
     const yardCard = 4;
     return {
       delta: QUALITY_DELTA[quality],
-      yards: yardCard * multiplier,
+      yards: roundAwayFromZero(yardCard * multiplier),
     };
   }
 

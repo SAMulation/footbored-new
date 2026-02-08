@@ -50,6 +50,13 @@ function renderState(engine: GameEngine, humanSide: TeamSide) {
 
   console.log('\n=== FootBored Terminal ===');
   console.log(`Quarter ${engine.state.field.quarter} | Clock ${formatClock(engine.state.field.clockSeconds)}`);
+  if (engine.state.field.isOvertime) {
+    const period = engine.state.field.overtimePeriod ?? 1;
+    console.log(`OVERTIME Period ${period}${period >= 5 ? ' (2PT Shootout)' : ''}`);
+  }
+  if (engine.state.field.awaitingZeroSecondPlay) {
+    console.log('Zero-second play window is active. This play can end the period.');
+  }
   console.log(`Score: HOME ${home.score} - AWAY ${away.score}`);
   console.log(`Ball: ${engine.state.field.ballOn} | Down: ${engine.state.field.down} | To Go: ${engine.state.field.toGo}`);
   console.log(`Possession: ${offenseSide.toUpperCase()} | Defense: ${defenseSide.toUpperCase()}`);
@@ -105,6 +112,14 @@ async function main() {
       }
 
       const humanCard = hand[selectedIndex];
+      if (
+        engine.state.field.isOvertime &&
+        (engine.state.field.overtimePeriod ?? 0) >= 5 &&
+        (humanCard.type === 'HM' || humanCard.type === 'TP')
+      ) {
+        console.log('OT5+ shootout disallows HM and TP. Choose another card.');
+        continue;
+      }
       const botCard = chooseBotCard(engine, botSide);
       if (!botCard) {
         console.log('Bot has no playable cards. Exiting.');

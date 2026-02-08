@@ -4,14 +4,11 @@ export type StandardPlayType = Extract<PlayType, 'SR' | 'LR' | 'SP' | 'LP'>;
 export type PlayQuality = 'B' | 'G' | 'D' | 'O' | 'W';
 export type MultiplierRank = 'K' | 'Q' | 'J' | '10';
 
+// Remaining open items not implemented in this engine slice.
 export const OPEN_RULE_IDS = [
-  'R-DECK-005',
-  'R-MULT-002',
-  'R-SAME-003',
-  'R-TP-002',
-  'R-TP-003',
-  'R-FLD-003',
-  'R-FLD-004',
+  'R-CLK-005',
+  'R-KICK-001',
+  'R-KICK-002',
 ] as const;
 
 export const STANDARD_QUALITY_MATRIX: Record<StandardPlayType, Record<StandardPlayType, PlayQuality>> = {
@@ -71,4 +68,9 @@ export const QUALITY_DELTA: Record<PlayQuality, number> = {
   D: 0,
   O: -1,
   W: -2,
+};
+
+export const COLLEGE_OVERTIME_CONFIG = {
+  startSpot: 25,
+  shootoutSpot: 3,
 };

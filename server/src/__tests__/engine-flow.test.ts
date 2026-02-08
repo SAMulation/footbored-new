@@ -90,8 +90,9 @@ test('quarter and game over progression after final tick', () => {
 
   playOneResolvedTurn(engine);
 
-  assert.equal(engine.state.phase, GamePhase.GAME_OVER);
+  assert.equal(engine.state.phase, GamePhase.RESOLUTION);
   assert.equal(engine.state.field.clockSeconds, 0);
+  assert.equal(engine.state.field.awaitingZeroSecondPlay, true);
 });
 
 test('advanceAfterResolution returns to selectable phase before game over', () => {

@@ -1,4 +1,4 @@
-# FootBored 5.1
+# FootBored 6.0
 
 Real-time multiplayer football card prototype built as a TypeScript monorepo.
 

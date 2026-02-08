@@ -1,4 +1,4 @@
-# FootBored 5.1 Roadmap
+# FootBored 6.0 Roadmap
 
 ## Current State (Feb 8, 2026)
 - Server/client/shared monorepo is buildable and lintable.
@@ -48,9 +48,11 @@
     - Canonical standard quality matrix (`SR/LR/SP/LP`).
     - Canonical multiplier table (`K/Q/J/10` with `B/G/D/O/W`).
     - Deterministic TP/HM outcome-table routing in engine.
+    - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`.
+    - Zero-second play window handling and college overtime staging.
   - OPEN (intentionally guarded in code):
-    - `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`.
-    - Engine throws explicit rule guard errors for OPEN IDs instead of silently approximating behavior.
+    - `R-CLK-005`, `R-KICK-001`, `R-KICK-002`.
+    - Engine guards remaining OPEN IDs and avoids silent approximation.
 - Exit criteria:
   - Rules test suite covers scoring, turnover, quarter transitions, and game over.
   - No nondeterministic rule outcomes for identical inputs.

@@ -17,6 +17,9 @@ interface ClientState {
     toGo: number;
     quarter: number;
     clockSeconds: number;
+    isOvertime?: boolean;
+    overtimePeriod?: number | null;
+    awaitingZeroSecondPlay?: boolean;
   };
   lastPlay?: {
     message: string;
@@ -89,7 +92,7 @@ function pause(ms: number) {
 }
 
 async function main() {
-  const { httpServer } = createGameServer();
+  const { httpServer, rooms } = createGameServer();
   await new Promise<void>((resolve) => httpServer.listen(0, resolve));
 
   const address = httpServer.address();
@@ -111,6 +114,8 @@ async function main() {
   const seenResolutionKeys = new Set<string>();
   const submittedTurnKey = new Map<string, string>([['home', ''], ['away', '']]);
   let hasRejoined = false;
+  let sawZeroSecondWindow = false;
+  let sawOvertime = false;
   const readHomeState = (): ClientState | null => homeState;
   const readAwayState = (): ClientState | null => awayState;
 
@@ -134,6 +139,13 @@ async function main() {
         resolutions += 1;
       }
     }
+
+    if (state.field.awaitingZeroSecondPlay) {
+      sawZeroSecondWindow = true;
+    }
+    if (state.field.isOvertime) {
+      sawOvertime = true;
+    }
   };
 
   home.on('GAME_STATE_UPDATE', (state: ClientState) => handleState('home', state));
@@ -143,6 +155,14 @@ async function main() {
   const awayJoin = await emitJoin(away, { roomId, requestedSeat: 'away' });
   assert.equal(homeJoin.seat, 'home');
   assert.equal(awayJoin.seat, 'away');
+
+  const room = rooms.get(roomId);
+  assert(room);
+  room.game.state.players.home.score = 21;
+  room.game.state.players.away.score = 21;
+  room.game.state.field.quarter = 4;
+  room.game.state.field.clockSeconds = 30;
+  room.game.state.field.awaitingZeroSecondPlay = false;
 
   let homeToken = homeJoin.playerToken;
 
@@ -186,7 +206,7 @@ async function main() {
         }
       }
 
-      if (hasRejoined && resolutions >= 3) {
+      if (hasRejoined && resolutions >= 3 && sawZeroSecondWindow && sawOvertime) {
         console.log('Socket regression passed (rejoin continuity + valid transitions + legal field state).');
         return;
       }
@@ -194,7 +214,7 @@ async function main() {
       await pause(50);
     }
 
-    throw new Error('Regression timeout before reaching 3 resolutions with rejoin');
+    throw new Error('Regression timeout before rejoin + zero-second + overtime assertions completed');
   } finally {
     home.disconnect();
     away.disconnect();
