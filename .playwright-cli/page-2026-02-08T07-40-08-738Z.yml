@@ -1,0 +1,88 @@
+- generic [ref=e72]:
+  - generic [ref=e77]:
+    - generic [ref=e78]:
+      - generic [ref=e79]:
+        - generic [ref=e81]: ONLINE
+        - generic [ref=e82]: OFFENSE CALL
+        - generic [ref=e83]:
+          - generic [ref=e84]: Q1 15:00
+          - generic [ref=e85]: 1st & 10
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - generic [ref=e88]: HOME
+          - generic [ref=e89]: TO 3 / DECK 9
+        - generic [ref=e90]:
+          - generic [ref=e91]: 0 - 0
+          - generic [ref=e92]: HOME vs AWAY
+        - generic [ref=e93]:
+          - generic [ref=e94]: AWAY
+          - generic [ref=e95]: TO 3 / DECK 9
+      - generic [ref=e97]: Pick your play
+    - generic [ref=e135]:
+      - generic [ref=e136]:
+        - generic [ref=e137]: BOT MATCH
+        - generic [ref=e138]: "ROOM: BOTW7G7"
+      - generic [ref=e140]:
+        - generic [ref=e202]:
+          - generic [ref=e203]: "10"
+          - generic [ref=e204]: "20"
+          - generic [ref=e205]: "30"
+          - generic [ref=e206]: "40"
+          - generic [ref=e207]: "50"
+          - generic [ref=e208]: "40"
+          - generic [ref=e209]: "30"
+          - generic [ref=e210]: "20"
+          - generic [ref=e211]: "10"
+        - generic [ref=e212]:
+          - generic [ref=e213]: Ball on 25
+          - generic [ref=e214]: Line to gain 35
+          - generic [ref=e215]: Home driving ->
+      - generic [ref=e216]:
+        - generic [ref=e217]: PREVIOUS PLAY
+        - generic [ref=e218]: "Coin toss: HOME receives, AWAY kicks. Kickoff touchback: HOME starts at 25. KICKOFF | 65y | Spot 25 | Touchback"
+    - generic [ref=e219]:
+      - generic [ref=e220]:
+        - generic [ref=e221]: Play Command Rail
+        - generic [ref=e222]: Pick your play
+      - generic [ref=e224]:
+        - generic [ref=e226] [cursor=pointer]: Trick Play (1)
+        - generic [ref=e228] [cursor=pointer]: Hail Mary (3)
+        - generic [ref=e230] [cursor=pointer]: Field Goal
+        - generic [ref=e231]: Punt - 4th down only
+        - generic [ref=e233] [cursor=pointer]: Timeout (3)
+      - generic [ref=e235]:
+        - button "Long Pass (LP)" [ref=e236] [cursor=pointer]:
+          - generic [ref=e237]:
+            - generic [ref=e238]: LP
+            - generic [ref=e239]: "1"
+          - generic [ref=e240]:
+            - generic [ref=e241]: 
+            - generic [ref=e242]: PASS
+          - generic [ref=e244]: Long Pass
+        - button "Long Run (LR)" [ref=e245] [cursor=pointer]:
+          - generic [ref=e246]:
+            - generic [ref=e247]: LR
+            - generic [ref=e248]: "1"
+          - generic [ref=e249]:
+            - generic [ref=e250]: 
+            - generic [ref=e251]: RUN
+          - generic [ref=e253]: Long Run
+        - button "Long Run (LR)" [ref=e254] [cursor=pointer]:
+          - generic [ref=e255]:
+            - generic [ref=e256]: LR
+            - generic [ref=e257]: "1"
+          - generic [ref=e258]:
+            - generic [ref=e259]: 
+            - generic [ref=e260]: RUN
+          - generic [ref=e262]: Long Run
+  - tablist [ref=e118]:
+    - tab "  Home" [selected] [ref=e120] [cursor=pointer]:
+      - generic [ref=e121]:
+        - generic [ref=e123]: 
+        - generic [ref=e125]: 
+      - generic [ref=e126]: Home
+    - tab "  Explore" [ref=e128] [cursor=pointer]:
+      - generic [ref=e129]:
+        - generic [ref=e131]: 
+        - generic [ref=e133]: 
+      - generic [ref=e134]: Explore
