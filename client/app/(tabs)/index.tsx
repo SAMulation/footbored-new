@@ -70,6 +70,19 @@ function formatLastPlayMessage(gameState: ClientGameState): string | null {
 }
 
 function resolvePlayContext(gameState: ClientGameState, isMyTurn: boolean): { title: string; message: string } {
+  if (gameState.phase === GamePhase.CONVERSION_OFFENSE_SELECT && !isMyTurn) {
+    return {
+      title: 'CONVERSION',
+      message: 'Opponent is choosing XP or 2PT.',
+    };
+  }
+  if (gameState.phase === GamePhase.CONVERSION_DEFENSE_SELECT && !isMyTurn) {
+    return {
+      title: 'CONVERSION',
+      message: 'Opponent is selecting defense for the 2PT attempt.',
+    };
+  }
+
   if (gameState.waitingForOpponent) {
     return {
       title: 'STATUS',
@@ -292,7 +305,7 @@ export default function GameScreen() {
     : 0;
 
   const specialActionsByType = useMemo(() => {
-    const byType = new Map<PlayType, { id: string; enabled: boolean; remaining: number | null }>();
+    const byType = new Map<PlayType, { id: string; enabled: boolean; remaining: number | null; reason?: string }>();
     if (!gameState) return byType;
 
     for (const action of gameState.myState.specialActions) {
@@ -301,6 +314,7 @@ export default function GameScreen() {
           id: action.id,
           enabled: action.enabled,
           remaining: action.remaining,
+          reason: action.reason,
         });
       }
     }
@@ -326,9 +340,27 @@ export default function GameScreen() {
         if (!state) return null;
         const label = SPECIAL_ACTION_LABELS[action.type] ?? action.type;
         const suffix = state.remaining === null ? '' : ` (${state.remaining})`;
+        let reasonSuffix = '';
+        if (!state.enabled) {
+          if (state.reason === 'mandatory_two_point') {
+            reasonSuffix = ' - locked (2PT required)';
+          } else if (state.reason === 'offense_only') {
+            reasonSuffix = ' - offense only';
+          } else if (state.reason === 'fourth_down_only') {
+            reasonSuffix = ' - 4th down only';
+          } else if (state.reason === 'timeouts_exhausted') {
+            reasonSuffix = ' - no timeouts';
+          } else if (state.reason === 'hm_exhausted') {
+            reasonSuffix = ' - HM exhausted';
+          } else if (state.reason === 'tp_exhausted') {
+            reasonSuffix = ' - TP exhausted';
+          } else if (state.reason) {
+            reasonSuffix = ` - ${state.reason.replace(/_/g, ' ')}`;
+          }
+        }
         return {
           cardId: state.id,
-          label: `${label}${suffix}`,
+          label: `${label}${suffix}${reasonSuffix}`,
           enabled: state.enabled,
         };
       })
