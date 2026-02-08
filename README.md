@@ -8,6 +8,18 @@ Real-time multiplayer football card prototype built as a TypeScript monorepo.
 - `server/`: Node + Socket.IO authoritative game server
 - `shared/`: shared game types and constants used by both sides
 
+## Deep Documentation
+
+- Start here: `docs/README.md`
+- System overview: `docs/01-system-overview.md`
+- Shared contracts: `docs/02-shared-contracts.md`
+- Server runtime and engine: `docs/03-server-runtime-and-engine.md`
+- Client app flow: `docs/04-client-app-flow.md`
+- Testing and simulation: `docs/05-testing-and-simulation.md`
+- Rules/assumptions and gaps: `docs/06-rules-assumptions-and-gaps.md`
+- Supabase/auth/invite roadmap: `docs/07-roadmap-supabase-auth-lobbies.md`
+- File-by-file map: `docs/08-codebase-map.md`
+
 ## Prerequisites
 
 - Node.js 20+ (tested with modern Node)
