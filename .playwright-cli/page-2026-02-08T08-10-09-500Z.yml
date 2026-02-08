@@ -1,0 +1,47 @@
+- generic [ref=e80]:
+  - generic [ref=e85]:
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - generic [ref=e89]: ONLINE
+        - generic [ref=e90]: READY
+        - generic [ref=e91]:
+          - generic [ref=e92]: Q1 15:00
+          - generic [ref=e93]: 1st & 10
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - generic [ref=e96]: HOME
+          - generic [ref=e97]: TO 3 / DECK 0
+        - generic [ref=e98]:
+          - generic [ref=e99]: 0 - 0
+          - generic [ref=e100]: HOME vs AWAY
+          - generic [ref=e101]: Q1 15:00 • 1st & 10 • Ball on 25
+        - generic [ref=e102]:
+          - generic [ref=e103]: AWAY
+          - generic [ref=e104]: TO 3 / DECK 0
+      - generic [ref=e105]:
+        - generic [ref=e107]: 1. Pick
+        - generic [ref=e109]: 2. Lock
+        - generic [ref=e111]: 3. Resolve
+      - generic [ref=e113]: Ready for kickoff
+    - generic [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e121]: FootBored 6.0
+        - generic [ref=e122]: Server Online
+      - generic [ref=e124] [cursor=pointer]: Quick Play (vs Bot)
+      - generic [ref=e125]: Advanced Multiplayer
+      - generic [ref=e126]: Room Code
+      - textbox "ABCD" [ref=e127]: TEST_ROOM
+      - generic [ref=e128]:
+        - generic [ref=e130] [cursor=pointer]: Join
+        - generic [ref=e132] [cursor=pointer]: Create
+  - tablist [ref=e134]:
+    - tab "  Home" [selected] [ref=e136] [cursor=pointer]:
+      - generic [ref=e137]:
+        - generic [ref=e139]: 
+        - generic [ref=e141]: 
+      - generic [ref=e142]: Home
+    - tab "  Explore" [ref=e144] [cursor=pointer]:
+      - generic [ref=e145]:
+        - generic [ref=e147]: 
+        - generic [ref=e149]: 
+      - generic [ref=e150]: Explore
