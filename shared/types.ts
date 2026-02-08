@@ -96,3 +96,16 @@ export interface ClientGameState {
   lastPlay?: PlayResult;
   waitingForOpponent: boolean;
 }
+
+export interface JoinGamePayload {
+  roomId: string;
+  playerToken?: string;
+  requestedSeat?: 'home' | 'away';
+}
+
+export interface JoinGameAck {
+  roomId: string;
+  playerToken: string;
+  seat: 'home' | 'away';
+  rejoined: boolean;
+}

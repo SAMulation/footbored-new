@@ -1,14 +1,14 @@
-// client/hooks/use-game-socket.ts
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Platform } from 'react-native';
-import { ClientGameState } from '../../shared/types'; 
+
+import { ClientGameState, JoinGameAck, JoinGamePayload } from '../../shared/types';
 
 const LOCAL_IP = '192.168.0.12';
 const PORT = '3000';
 const ENV_SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
 
-const DEFAULT_SERVER_URL = Platform.OS === 'web' 
+const DEFAULT_SERVER_URL = Platform.OS === 'web'
   ? `http://localhost:${PORT}`
   : `http://${LOCAL_IP}:${PORT}`;
 
@@ -18,67 +18,113 @@ export const useGameSocket = () => {
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [seat, setSeat] = useState<'home' | 'away' | null>(null);
+  const [isRejoining, setIsRejoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [lastJoinWasRejoin, setLastJoinWasRejoin] = useState(false);
+
+  const tokenByRoomRef = useRef<Record<string, string>>({});
+  const currentRoomRef = useRef<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
+  const normalizedRoomId = useMemo(() => roomId?.trim().toUpperCase() ?? null, [roomId]);
+
   useEffect(() => {
-    // 1. Initialize Connection
     console.log('🔗 Connecting to:', SERVER_URL);
+
     socketRef.current = io(SERVER_URL, {
-      transports: ['websocket'], // Force WebSocket to avoid polling issues
+      transports: ['websocket'],
     });
 
     const socket = socketRef.current;
 
-    // 2. Setup Listeners
     socket.on('connect', () => {
-      console.log('✅ Connected to Server:', socket.id);
       setIsConnected(true);
+
+      if (currentRoomRef.current) {
+        const existingToken = tokenByRoomRef.current[currentRoomRef.current];
+        const payload: JoinGamePayload = {
+          roomId: currentRoomRef.current,
+          playerToken: existingToken,
+        };
+
+        setIsRejoining(true);
+        socket.emit('JOIN_GAME', payload);
+      }
     });
 
     socket.on('disconnect', () => {
-      console.log('❌ Disconnected');
       setIsConnected(false);
+      if (currentRoomRef.current) {
+        setIsRejoining(true);
+      }
+    });
+
+    socket.on('JOIN_GAME_ACK', (ack: JoinGameAck) => {
+      const normalized = ack.roomId.trim().toUpperCase();
+      tokenByRoomRef.current[normalized] = ack.playerToken;
+      setRoomId(normalized);
+      setSeat(ack.seat);
+      setJoinError(null);
+      setIsRejoining(false);
+      setLastJoinWasRejoin(ack.rejoined);
+    });
+
+    socket.on('ERROR', (message: string) => {
+      setJoinError(message || 'Unknown socket error');
+      setIsRejoining(false);
     });
 
     socket.on('GAME_STATE_UPDATE', (newState: ClientGameState) => {
-      console.log('📩 State Updated:', newState.phase);
       setGameState(newState);
     });
 
-    // 3. Cleanup on Unmount
     return () => {
       socket.disconnect();
     };
   }, []);
 
-  // --- ACTIONS (The UI calls these) ---
+  const joinGame = (requestedRoomId: string = 'TEST_ROOM') => {
+    if (!socketRef.current) return;
 
-  const joinGame = (roomId: string = 'TEST_ROOM') => {
-    if (socketRef.current) {
-      const resolvedRoomId = roomId || 'TEST_ROOM';
-      setRoomId(resolvedRoomId);
-      socketRef.current.emit('JOIN_GAME', resolvedRoomId);
-    }
+    const normalized = requestedRoomId.trim().toUpperCase();
+    if (!normalized) return;
+
+    setRoomId(normalized);
+    currentRoomRef.current = normalized;
+    setJoinError(null);
+    setIsRejoining(true);
+
+    const payload: JoinGamePayload = {
+      roomId: normalized,
+      playerToken: tokenByRoomRef.current[normalized],
+    };
+
+    socketRef.current.emit('JOIN_GAME', payload);
   };
 
   const playCard = (cardId: string) => {
-    if (socketRef.current && gameState && roomId) {
-      socketRef.current.emit('PLAY_CARD', { roomId, cardId });
+    if (socketRef.current && gameState && normalizedRoomId && !isRejoining) {
+      socketRef.current.emit('PLAY_CARD', { roomId: normalizedRoomId, cardId });
     }
   };
 
   const playAgain = () => {
-    if (socketRef.current && roomId) {
-      socketRef.current.emit('RESET_GAME', { roomId });
+    if (socketRef.current && normalizedRoomId) {
+      socketRef.current.emit('RESET_GAME', { roomId: normalizedRoomId });
     }
   };
 
   return {
     gameState,
     isConnected,
-    roomId,
+    roomId: normalizedRoomId,
+    seat,
+    isRejoining,
+    joinError,
+    lastJoinWasRejoin,
     joinGame,
     playCard,
-    playAgain
+    playAgain,
   };
 };

@@ -17,10 +17,21 @@ function generateRoomCode(): string {
 }
 
 export default function GameScreen() {
-  const { gameState, isConnected, roomId, joinGame, playCard, playAgain } = useGameSocket();
+  const {
+    gameState,
+    isConnected,
+    roomId,
+    seat,
+    isRejoining,
+    joinError,
+    lastJoinWasRejoin,
+    joinGame,
+    playCard,
+    playAgain,
+  } = useGameSocket();
   const [roomInput, setRoomInput] = useState('TEST_ROOM');
 
-  const mySide = gameState?.myState.teamName === 'Away Team' ? 'away' : 'home';
+  const mySide = seat ?? (gameState?.myState.teamName === 'Away Team' ? 'away' : 'home');
   const possession = gameState?.field.possessionPlayerId === 'away' ? 'away' : 'home';
 
   const isMyTurn = !!gameState &&
@@ -136,8 +147,9 @@ export default function GameScreen() {
                   return (
                     <TouchableOpacity
                       key={action.type}
-                      style={styles.specialActionButton}
+                      style={[styles.specialActionButton, isRejoining && styles.specialActionButtonDisabled]}
                       onPress={() => playCard(cardId)}
+                      disabled={isRejoining}
                     >
                       <Text style={styles.specialActionText}>{action.label}</Text>
                     </TouchableOpacity>
@@ -146,6 +158,22 @@ export default function GameScreen() {
               </View>
             )}
           </>
+        )}
+
+        {isRejoining && (
+          <View style={styles.bannerInfo}>
+            <Text style={styles.bannerText}>Reconnecting...</Text>
+          </View>
+        )}
+        {!isRejoining && lastJoinWasRejoin && seat && (
+          <View style={styles.bannerInfo}>
+            <Text style={styles.bannerText}>Rejoined as {seat.toUpperCase()}</Text>
+          </View>
+        )}
+        {joinError && (
+          <View style={styles.bannerError}>
+            <Text style={styles.bannerText}>{joinError}</Text>
+          </View>
         )}
 
         {isGameOver && (
@@ -164,7 +192,7 @@ export default function GameScreen() {
         <PlayerHand
           hand={gameState.myState.hand}
           onPlayCard={playCard}
-          disabled={!isMyTurn || isGameOver}
+          disabled={!isMyTurn || isGameOver || isRejoining}
         />
       )}
     </SafeAreaView>
@@ -260,6 +288,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
+  specialActionButtonDisabled: {
+    opacity: 0.5,
+  },
   specialActionText: {
     color: '#fff4cc',
     fontSize: 12,
@@ -293,5 +324,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
+  },
+  bannerInfo: {
+    backgroundColor: 'rgba(41,128,185,0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  bannerError: {
+    backgroundColor: 'rgba(192,57,43,0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  bannerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
