@@ -5,6 +5,7 @@
 - Real-time socket game loop works with authoritative engine-side move submission.
 - Core rules are deterministic and backed by tests plus socket regression checks.
 - Mobile UI now includes live field, HUD, room join/create flow, special-action controls, and a game-over replay overlay.
+- Assumption-backed kick/clock closures are tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.
 
 ## Guiding Strategy: Logic First, UX in Parallel
 - Primary gate before deeper UX: deterministic, test-covered game logic that is playable outside the app.
@@ -48,11 +49,11 @@
     - Canonical standard quality matrix (`SR/LR/SP/LP`).
     - Canonical multiplier table (`K/Q/J/10` with `B/G/D/O/W`).
     - Deterministic TP/HM outcome-table routing in engine.
-    - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`.
+    - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`, `R-CLK-005`, `R-KICK-001`, `R-KICK-002`.
     - Zero-second play window handling and college overtime staging.
   - OPEN (intentionally guarded in code):
-    - `R-CLK-005`, `R-KICK-001`, `R-KICK-002`.
-    - Engine guards remaining OPEN IDs and avoids silent approximation.
+    - No kick/clock guardrail IDs remain in `OPEN_RULE_IDS`.
+    - Remaining unresolved canonical items are documented in `FOOTBORED_RULES.md` and assumption-gated where needed.
 - Exit criteria:
   - Rules test suite covers scoring, turnover, quarter transitions, and game over.
   - No nondeterministic rule outcomes for identical inputs.
@@ -99,3 +100,8 @@
 - Add reconnect-safe room state restoration and rejoin UX.
 - Add richer game-over details (per-play recap and quick rematch pairing behavior).
 - Expand UI tests around room/join/replay and action-button legality.
+
+## UX Roadmap Pointer
+- Browser UI/UX execution details are now tracked in `/Users/sam/Downloads/Projects/footbored-new/UX_ROADMAP.md`.
+- Keep this roadmap focused on product milestones and logic progression.
+- Keep UI implementation phases, acceptance checks, and component ownership in the dedicated UX roadmap file.

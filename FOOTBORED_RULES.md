@@ -274,9 +274,9 @@ This document:
 **Rule ID:** `R-CLK-002`  
 **Canonical Statement:** Clock exceptions MUST include at least: timeout plays, penalty plays, and touchback-on-kick cases.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `LIKELY`  
-**Conflict Notes:** Touchback dependency requires kickoff details that are still open.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Touchback behavior is implemented with explicit assumptions from `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.  
+**Implementation Gate:** Implemented.
 
 **Rule ID:** `R-CLK-003`  
 **Canonical Statement:** Teams MUST have 3 timeouts per regulation half.  
@@ -293,11 +293,11 @@ This document:
 **Implementation Gate:** confirm before coding.
 
 **Rule ID:** `R-CLK-005`  
-**Canonical Statement:** `TO` effect for "ice the kicker" is `OPEN` and MUST be confirmed before final FG logic implementation.  
+**Canonical Statement:** Defense timeout on offense field-goal attempts applies deterministic icing penalty and consumes one timeout; this is implemented as an assumptions-led closure pending stronger board-era mechanics.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Mentioned conceptually, not mechanically defined.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Board text confirms concept, not exact math; implementation uses explicit assumptions (`icingPenalty`) tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.  
+**Implementation Gate:** Implemented.
 
 ### Overtime
 **Rule ID:** `R-OT-001`  
@@ -323,18 +323,18 @@ This document:
 
 ### Kicking Systems (`FG`, `PT`, Kickoff)
 **Rule ID:** `R-KICK-001`  
-**Canonical Statement:** `FG` and `PT` are required rule paths, but exact success/placement/return mechanics are `OPEN` without stronger source confirmation.  
+**Canonical Statement:** `FG` and `PT` are implemented with deterministic assumption tables/ranges (distance bands, miss spot behavior, punt gross/return/touchback).  
 **Sources:** `SRC-BOARD-01`, `SRC-BOARD-02`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Board notes mention these systems but not all deterministic details.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Board notes confirm system presence but not full distributions; prototype behavior is assumptions-led and logged in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.  
+**Implementation Gate:** Implemented.
 
 **Rule ID:** `R-KICK-002`  
-**Canonical Statement:** Kickoff behavior (touchback spot, return modeling, timing effects) is `OPEN` and MUST be confirmed before coding final logic.  
+**Canonical Statement:** Kickoff behavior is implemented with deterministic touchback/return assumptions including touchback spot and timing flags.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `OPEN`  
-**Conflict Notes:** Clock exceptions reference touchback but kickoff mechanics are not fully specified.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Prototype uses explicit assumption values for kickoff rates/spotting while board-authentic distributions remain to be confirmed.  
+**Implementation Gate:** Implemented.
 
 ### Determinism and Replayability
 **Rule ID:** `R-DET-001`  
@@ -360,23 +360,23 @@ This document:
 **Implementation Gate:** Approved for coding.
 
 ## Open Questions (Do Not Implement Without Confirmation)
-1. **FG success model**
-   - **What is unknown:** Success odds by distance, whether random/deterministic, miss spot placement.
-   - **Conflicting evidence:** Board notes imply dice/probability usage; no full canonical table recovered.
-   - **Required confirmation:** Provide explicit FG probability table and miss-placement rule.
-   - **Implementation Gate:** confirm before coding.
+1. **Board-authentic FG probability model**
+   - **What is unknown:** Final board-era FG odds by distance and exact miss-spot semantics.
+   - **Conflicting evidence:** Board notes imply probabilistic FG logic but no complete canonical table is legible in current artifacts.
+   - **Required confirmation:** Recover/confirm original FG table to replace current assumption bands.
+   - **Implementation Gate:** confirm before replacing assumptions.
 
-2. **Punt model**
-   - **What is unknown:** Punt distance distribution, return rules, touchback placement, blocked-punt handling.
-   - **Conflicting evidence:** Notes indicate punt process exists but full quantitative rules are incomplete.
-   - **Required confirmation:** Provide exact punt + return + touchback pipeline.
-   - **Implementation Gate:** confirm before coding.
+2. **Board-authentic punt distribution**
+   - **What is unknown:** Exact gross/return distributions, touchback placement, and blocked-punt edge handling from prior physical/digital rulesets.
+   - **Conflicting evidence:** Punt is present in sources, but full numeric procedure is incomplete.
+   - **Required confirmation:** Recover/confirm canonical punt table to replace current deterministic ranges.
+   - **Implementation Gate:** confirm before replacing assumptions.
 
-3. **Kickoff model**
-   - **What is unknown:** Kickoff trigger flow, return model, touchback spot (`20/25/other`), and clock coupling.
-   - **Conflicting evidence:** Clock exception references touchback but kickoff detail is incomplete.
-   - **Required confirmation:** Provide kickoff placement and return procedure.
-   - **Implementation Gate:** confirm before coding.
+3. **Board-authentic kickoff procedure**
+   - **What is unknown:** Original kickoff touchback spot/rates and return modeling specifics.
+   - **Conflicting evidence:** Clock rules reference kick touchbacks but detailed kickoff mechanics remain partly illegible.
+   - **Required confirmation:** Confirm canonical kickoff flow to replace current deterministic assumptions.
+   - **Implementation Gate:** confirm before replacing assumptions.
 
 4. **Rounding for fractional multipliers**
    - **What is unknown:** Integer conversion for products using `1.5` and `0.5`.
@@ -417,17 +417,10 @@ This document:
 ## Non-Canonical Current Prototype Snapshot
 Current prototype behavior in `/Users/sam/Downloads/Projects/footbored-new/server/src/engine.ts` diverges from canonical rules in these major ways:
 
-1. It uses a direct static offense-vs-defense yardage matrix for all play types, including `TP/HM/FG/PT/TO`.
-2. It does not implement canonical multiplier-card and yard-card resolution flow.
-3. It does not implement the Same Play mechanism.
-4. It does not implement canonical Big Play tables.
-5. `HM` and `TP` are currently matrix rows, not die-based special resolution tables.
-6. `FG` is currently a deterministic threshold formula, not canonical board-confirmed rules.
-7. `PT` is currently fixed-yard behavior with simplified turnover handling.
-8. `TO` handling is simplified and does not model complete timeout inventory/ice-kicker canonical details.
-9. Clock progression lacks full canonical exceptions and zero-second-play nuance.
-10. Overtime canonical possession model is not fully represented.
-11. Runtime randomness uses generic RNG and lacks canonical event-level trace requirements for reproducible replay.
+1. Kicking (`FG/PT/Kickoff`) and icing are implemented with explicit assumptions, not fully recovered board-era tables.
+2. Standard-card usage remains hand-draw driven in runtime with virtual specials, not yet a strict board inventory-only flow.
+3. Some advanced football detail remains assumption-based or partial: conversion baseline outside OT rules, half-distance semantics, and full OT inventory cadence.
+4. Determinism is hash-seeded and replay-safe for multiplayer, but still models inferred procedure where source text is incomplete.
 
 These prototype behaviors MUST be treated as temporary implementation state, not canon.
 
@@ -438,7 +431,9 @@ These prototype behaviors MUST be treated as temporary implementation state, not
 - **2026-02-08:** Chose one-file canonical rules documentation format for long-term reference.
 - **2026-02-08:** Locked OPEN resolution policies for rounding, same-play fallback, TP handling, safety semantics, and offense-forward coordinate modeling.
 - **2026-02-08:** Adopted college-style overtime staging for prototype (`OT1-2` normal, `OT3-4` mandatory conversion context, `OT5+` shootout).
+- **2026-02-08:** Closed `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` in code using explicit assumptions tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.
 
 ## Change Log
 - **2026-02-08:** Initial creation of canonical rules reference (`v1.0` baseline).
 - **2026-02-08:** Promoted `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, and `R-FLD-004` from OPEN to IMPLEMENTED.
+- **2026-02-08:** Promoted `R-CLK-002`, `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` to IMPLEMENTED (assumption-backed closures).

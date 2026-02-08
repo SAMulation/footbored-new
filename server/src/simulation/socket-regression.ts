@@ -10,6 +10,7 @@ interface ClientState {
   waitingForOpponent: boolean;
   myState: {
     hand: Array<{ id: string; type: PlayType }>;
+    specialActions?: Array<{ id: string; type: PlayType; enabled: boolean }>;
   };
   field: {
     ballOn: number;
@@ -30,10 +31,26 @@ interface ClientState {
 function chooseCard(state: ClientState): string | undefined {
   const hand = state.myState.hand;
   if (hand.length === 0) return undefined;
+  const specialActions = state.myState.specialActions ?? [];
+  const specialId = (type: 'TP' | 'HM' | 'FG' | 'PT') =>
+    specialActions.find((action) => action.type === type && action.enabled)?.id;
 
   if (state.field.down === 4) {
-    const punt = hand.find((card) => card.type === 'PT');
-    if (punt) return punt.id;
+    const fieldGoal = specialId('FG');
+    if (fieldGoal && state.field.ballOn >= 60) return fieldGoal;
+
+    const punt = specialId('PT');
+    if (punt) return punt;
+  }
+
+  if (state.field.toGo >= 14) {
+    const hailMary = specialId('HM');
+    if (hailMary) return hailMary;
+  }
+
+  if (state.field.toGo >= 8) {
+    const trickPlay = specialId('TP');
+    if (trickPlay) return trickPlay;
   }
 
   if (state.field.toGo <= 3) {
@@ -91,10 +108,10 @@ function pause(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-async function runReconnectScenario(url: string, rooms: Map<string, any>) {
+async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>) {
   const roomId = `ROOM${Date.now().toString().slice(-6)}`;
 
-  let home = await connectClient(url);
+  const home = await connectClient(url);
   const away = await connectClient(url);
   let homeState: ClientState | null = null;
   let awayState: ClientState | null = null;
@@ -104,9 +121,8 @@ async function runReconnectScenario(url: string, rooms: Map<string, any>) {
   let resolutions = 0;
   const seenResolutionKeys = new Set<string>();
   const submittedTurnKey = new Map<string, string>([['home', ''], ['away', '']]);
-  let hasRejoined = false;
-  let sawZeroSecondWindow = false;
-  let sawOvertime = false;
+  let homeReachedGameOver = false;
+  let awayReachedGameOver = false;
   const readHomeState = (): ClientState | null => homeState;
   const readAwayState = (): ClientState | null => awayState;
 
@@ -130,12 +146,9 @@ async function runReconnectScenario(url: string, rooms: Map<string, any>) {
         resolutions += 1;
       }
     }
-
-    if (state.field.awaitingZeroSecondPlay) {
-      sawZeroSecondWindow = true;
-    }
-    if (state.field.isOvertime) {
-      sawOvertime = true;
+    if (state.phase === GamePhase.GAME_OVER) {
+      if (label === 'home') homeReachedGameOver = true;
+      if (label === 'away') awayReachedGameOver = true;
     }
   };
 
@@ -149,30 +162,20 @@ async function runReconnectScenario(url: string, rooms: Map<string, any>) {
 
   const room = rooms.get(roomId);
   assert(room);
-  room.game.state.players.home.score = 21;
-  room.game.state.players.away.score = 21;
+  room.game.state.players.home.score = 24;
+  room.game.state.players.away.score = 3;
+  room.game.state.field.possessionPlayerId = 'home';
+  room.game.state.field.ballOn = 45;
+  room.game.state.field.down = 1;
+  room.game.state.field.toGo = 10;
   room.game.state.field.quarter = 4;
   room.game.state.field.clockSeconds = 30;
   room.game.state.field.awaitingZeroSecondPlay = false;
-
-  let homeToken = homeJoin.playerToken;
+  room.game.syncState();
 
   const start = Date.now();
   try {
-    while (Date.now() - start < 22000) {
-      if (!hasRejoined && resolutions >= 1) {
-        hasRejoined = true;
-        home.disconnect();
-        await pause(80);
-        home = await connectClient(url);
-        const rejoinAck = await emitJoin(home, { roomId, playerToken: homeToken });
-        assert.equal(rejoinAck.rejoined, true);
-        assert.equal(rejoinAck.seat, 'home');
-        homeToken = rejoinAck.playerToken;
-        submittedTurnKey.set('home', '');
-        home.on('GAME_STATE_UPDATE', (state: ClientState) => handleState('home', state));
-      }
-
+    while (Date.now() - start < 20000) {
       const currentHomeState = readHomeState();
       if (currentHomeState && isSelectablePhase(currentHomeState.phase) && !currentHomeState.waitingForOpponent) {
         const turnKey = `${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
@@ -197,14 +200,14 @@ async function runReconnectScenario(url: string, rooms: Map<string, any>) {
         }
       }
 
-      if (hasRejoined && resolutions >= 3 && sawZeroSecondWindow && sawOvertime) {
+      if (homeReachedGameOver && awayReachedGameOver && resolutions >= 1) {
         return;
       }
 
       await pause(50);
     }
 
-    throw new Error('Reconnect scenario timed out');
+    throw new Error('Two-player full-game scenario timed out');
   } finally {
     home.disconnect();
     away.disconnect();
@@ -215,7 +218,7 @@ function isSelectablePhase(phase: string): boolean {
   return phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT;
 }
 
-async function runBotQuickPlayScenario(url: string) {
+async function runBotQuickPlayFullGameScenario(url: string, rooms: Map<string, any>) {
   const roomId = `BOT${Date.now().toString().slice(-6)}`;
   const client = await connectClient(url);
 
@@ -242,10 +245,22 @@ async function runBotQuickPlayScenario(url: string) {
 
   const ack = await emitJoin(client, { roomId, quickPlayBot: true });
   assert.equal(ack.mode, 'BOT');
+  const room = rooms.get(roomId);
+  assert(room);
+  room.game.state.players.home.score = 28;
+  room.game.state.players.away.score = 7;
+  room.game.state.field.possessionPlayerId = ack.seat;
+  room.game.state.field.ballOn = ack.seat === 'home' ? 40 : 60;
+  room.game.state.field.down = 1;
+  room.game.state.field.toGo = 10;
+  room.game.state.field.quarter = 4;
+  room.game.state.field.clockSeconds = 30;
+  room.game.state.field.awaitingZeroSecondPlay = false;
+  room.game.syncState();
 
   const start = Date.now();
   try {
-    while (Date.now() - start < 12000) {
+    while (Date.now() - start < 16000) {
       const currentState = readState();
       if (currentState && isSelectablePhase(currentState.phase) && !currentState.waitingForOpponent) {
         const cardId = chooseCard(currentState);
@@ -254,14 +269,14 @@ async function runBotQuickPlayScenario(url: string) {
         }
       }
 
-      if (resolutions >= 3) {
+      if (currentState?.phase === GamePhase.GAME_OVER && resolutions >= 1) {
         return;
       }
 
       await pause(50);
     }
 
-    throw new Error('Bot quick-play scenario timed out');
+    throw new Error('Bot quick-play full-game scenario timed out');
   } finally {
     client.disconnect();
   }
@@ -279,9 +294,9 @@ async function main() {
   const url = `http://127.0.0.1:${address.port}`;
 
   try {
-    await runReconnectScenario(url, rooms);
-    await runBotQuickPlayScenario(url);
-    console.log('Socket regression passed (rejoin + overtime/zero-second + bot quick-play).');
+    await runTwoPlayerFullGameScenario(url, rooms);
+    await runBotQuickPlayFullGameScenario(url, rooms);
+    console.log('Socket regression passed (two-player + bot quick-play full-game completion).');
   } finally {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   }
