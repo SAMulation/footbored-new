@@ -21,6 +21,7 @@ export interface RuleAssumptions {
   };
   readonly fieldGoal: {
     readonly distanceBands: readonly DistanceBand[];
+    readonly longShotSuccessRate: number;
     readonly icingPenalty: number;
     readonly missSpotRule: 'line_of_scrimmage' | 'spot_of_kick';
   };
@@ -51,6 +52,7 @@ export const RULE_ASSUMPTIONS: RuleAssumptions = Object.freeze({
   }),
   fieldGoal: Object.freeze({
     distanceBands: FIELD_GOAL_DISTANCE_BANDS,
+    longShotSuccessRate: 0.08,
     icingPenalty: 0.12,
     missSpotRule: 'line_of_scrimmage',
   }),

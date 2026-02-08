@@ -419,7 +419,7 @@ export class GameEngine {
     }
 
     if (type === 'TO') {
-      return isOffense && this.state.players[side].timeouts > 0;
+      return this.state.players[side].timeouts > 0;
     }
 
     return false;
@@ -485,7 +485,7 @@ export class GameEngine {
 
       let reason: string | undefined;
       if (!enabled) {
-        if (!isOffense && type !== 'TP') {
+        if (!isOffense && type !== 'TP' && type !== 'TO') {
           reason = 'offense_only';
         } else if (type === 'TP' && trickRemaining <= 0) {
           reason = 'tp_exhausted';
@@ -530,6 +530,21 @@ export class GameEngine {
       };
     }
 
+    if (defenseCard.type === 'TO' && offenseCard.type !== 'FG') {
+      this.state.players[defenseSide].timeouts = Math.max(0, this.state.players[defenseSide].timeouts - 1);
+      return {
+        delta: 0,
+        yards: 0,
+        message: 'Defense timeout called. No play run.',
+        keepOffenseCard: true,
+        keepDefenseCard: true,
+        noDownProgress: true,
+        noClockTick: true,
+        multiplierCard: 'TO',
+        yardCard: 0,
+      };
+    }
+
     if (offenseCard.type === 'PT') {
       if (this.state.field.down !== 4 && !this.state.field.isOvertime) {
         return {
@@ -561,10 +576,26 @@ export class GameEngine {
     if (offenseCard.type === 'FG') {
       const forwardBall = this.toForwardBall(this.state.field.ballOn, offenseSide);
       const distance = Math.max(0, 100 - forwardBall);
-      const defensePenalty = defenseCard.type === 'TO' ? 0 : 5;
-      const kickDifficulty = Math.max(0, distance - 35);
-      const kickScore = 70 - kickDifficulty - defensePenalty;
-      const made = kickScore >= 45;
+      const baseSuccessRate = this.getFieldGoalSuccessRate(distance);
+      const icedKicker = defenseCard.type === 'TO' && this.state.players[defenseSide].timeouts > 0;
+
+      if (icedKicker) {
+        this.state.players[defenseSide].timeouts = Math.max(0, this.state.players[defenseSide].timeouts - 1);
+      }
+
+      const adjustedSuccessRate = Math.max(
+        0,
+        baseSuccessRate - (icedKicker ? RULE_ASSUMPTIONS.fieldGoal.icingPenalty : 0)
+      );
+      const fgRoll = hashToIndex(`${turnSeed}|fg-roll`, 1000) / 1000;
+      const made = fgRoll < adjustedSuccessRate;
+
+      const fgFlags: MatchupFlags = {
+        kickType: 'FIELD_GOAL',
+        kickDistance: distance,
+        kickResultSpot: this.state.field.ballOn,
+        icedKicker,
+      };
 
       if (made) {
         this.state.players[offenseSide].score += FIELD_GOAL_POINTS;
@@ -577,24 +608,30 @@ export class GameEngine {
         return {
           delta: 1,
           yards: 0,
-          message: `Field goal good from ${distance} yards.`,
+          message: `Field goal good from ${distance} yards${icedKicker ? ' (iced)' : ''}.`,
           fieldGoalAttempt: true,
           noDownProgress: true,
           multiplierCard: 'FG',
           yardCard: 0,
-          flags: kickoffFlags,
+          flags: {
+            ...fgFlags,
+            ...(kickoffFlags ?? {}),
+          },
         };
       }
 
+      const missYards = RULE_ASSUMPTIONS.fieldGoal.missSpotRule === 'spot_of_kick' ? -7 : 0;
+
       return {
         delta: -1,
-        yards: 0,
-        message: `Field goal missed from ${distance} yards.`,
+        yards: missYards,
+        message: `Field goal missed from ${distance} yards${icedKicker ? ' (iced)' : ''}.`,
         forceTurnover: true,
         noDownProgress: true,
         fieldGoalAttempt: true,
         multiplierCard: 'FG',
         yardCard: 0,
+        flags: fgFlags,
       };
     }
 
@@ -944,6 +981,16 @@ export class GameEngine {
     const boundedMax = Math.max(min, max);
     const span = boundedMax - boundedMin + 1;
     return boundedMin + hashToIndex(seed, span);
+  }
+
+  private getFieldGoalSuccessRate(distance: number): number {
+    for (const band of RULE_ASSUMPTIONS.fieldGoal.distanceBands) {
+      if (distance <= band.maxDistance) {
+        return band.successRate;
+      }
+    }
+
+    return RULE_ASSUMPTIONS.fieldGoal.longShotSuccessRate;
   }
 
   private resolvePuntOutcome(offenseSide: TeamSide, seed: string): { yards: number; message: string; flags: MatchupFlags } {

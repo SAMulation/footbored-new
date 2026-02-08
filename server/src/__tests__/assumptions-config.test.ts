@@ -36,4 +36,6 @@ test('kick assumptions stay in legal football ranges', () => {
 
   assert(RULE_ASSUMPTIONS.fieldGoal.icingPenalty > 0);
   assert(RULE_ASSUMPTIONS.fieldGoal.icingPenalty < 1);
+  assert(RULE_ASSUMPTIONS.fieldGoal.longShotSuccessRate >= 0);
+  assert(RULE_ASSUMPTIONS.fieldGoal.longShotSuccessRate <= 1);
 });

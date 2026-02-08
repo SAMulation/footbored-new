@@ -161,6 +161,11 @@ function chooseBotCard(room: RoomContext): string | null {
       }
     }
   } else {
+    const to = specialId('TO');
+    if (to && room.game.state.field.down === 4 && room.game.state.field.ballOn >= 55) {
+      return to;
+    }
+
     const tp = specialId('TP');
     if (tp && room.game.state.field.toGo >= 8) {
       return tp;
