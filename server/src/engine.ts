@@ -2,6 +2,20 @@ import { Card, GamePhase, PlayType, PlayerState, ServerGameState } from '../../s
 import { GAME_CONFIG } from '../../shared/constants';
 import { Deck } from './models/Deck';
 import { Hand } from './models/Hand';
+import {
+  HAIL_MARY_OUTCOME_TABLE,
+  HailMaryOutcomeCode,
+  MULTIPLIER_SEQUENCE,
+  MULTIPLIER_TABLE,
+  OPEN_RULE_IDS,
+  PlayQuality,
+  QUALITY_DELTA,
+  STANDARD_QUALITY_MATRIX,
+  StandardPlayType,
+  TRICK_PLAY_OUTCOME_TABLE,
+  TrickPlayOutcomeCode,
+  YARD_CARD_SEQUENCE,
+} from './rules/canonical';
 
 export type TeamSide = 'home' | 'away';
 
@@ -21,114 +35,41 @@ interface MatchupResult {
   noDownProgress?: boolean;
   noClockTick?: boolean;
   fieldGoalAttempt?: boolean;
+  multiplierCard?: string;
+  yardCard?: number;
 }
 
 const FIELD_GOAL_POINTS = 3;
 const PLAY_CLOCK_TICK_SECONDS = 30;
 const QUARTER_SECONDS = 900;
 const MIDFIELD_SPOT = 50;
+const STANDARD_PLAYS: StandardPlayType[] = ['SR', 'LR', 'SP', 'LP'];
 
-const MATCHUP_MATRIX: Record<PlayType, Record<PlayType, { delta: number; yards: number }>> = {
-  SR: {
-    SR: { delta: 0, yards: 3 },
-    LR: { delta: 1, yards: 4 },
-    SP: { delta: 2, yards: 6 },
-    LP: { delta: 2, yards: 6 },
-    TP: { delta: 1, yards: 4 },
-    HM: { delta: 1, yards: 5 },
-    FG: { delta: 2, yards: 7 },
-    PT: { delta: 2, yards: 7 },
-    TO: { delta: 1, yards: 4 },
-  },
-  LR: {
-    SR: { delta: 0, yards: 2 },
-    LR: { delta: 0, yards: 3 },
-    SP: { delta: 1, yards: 5 },
-    LP: { delta: 2, yards: 8 },
-    TP: { delta: 0, yards: 2 },
-    HM: { delta: 1, yards: 6 },
-    FG: { delta: 2, yards: 8 },
-    PT: { delta: 2, yards: 8 },
-    TO: { delta: 0, yards: 2 },
-  },
-  SP: {
-    SR: { delta: 1, yards: 4 },
-    LR: { delta: 1, yards: 4 },
-    SP: { delta: 0, yards: 3 },
-    LP: { delta: 1, yards: 5 },
-    TP: { delta: 0, yards: 2 },
-    HM: { delta: 1, yards: 6 },
-    FG: { delta: 1, yards: 5 },
-    PT: { delta: 1, yards: 5 },
-    TO: { delta: 0, yards: 2 },
-  },
-  LP: {
-    SR: { delta: 0, yards: 1 },
-    LR: { delta: 0, yards: 2 },
-    SP: { delta: 0, yards: 2 },
-    LP: { delta: 0, yards: 3 },
-    TP: { delta: -1, yards: -1 },
-    HM: { delta: 1, yards: 7 },
-    FG: { delta: 0, yards: 3 },
-    PT: { delta: 0, yards: 3 },
-    TO: { delta: -1, yards: -1 },
-  },
-  TP: {
-    SR: { delta: 2, yards: 9 },
-    LR: { delta: 1, yards: 5 },
-    SP: { delta: -1, yards: -2 },
-    LP: { delta: 0, yards: 3 },
-    TP: { delta: 0, yards: 1 },
-    HM: { delta: -1, yards: -2 },
-    FG: { delta: 1, yards: 5 },
-    PT: { delta: 1, yards: 5 },
-    TO: { delta: 2, yards: 9 },
-  },
-  HM: {
-    SR: { delta: 1, yards: 6 },
-    LR: { delta: 0, yards: 3 },
-    SP: { delta: -1, yards: -3 },
-    LP: { delta: 0, yards: 2 },
-    TP: { delta: -1, yards: -3 },
-    HM: { delta: 0, yards: 0 },
-    FG: { delta: 0, yards: 3 },
-    PT: { delta: 0, yards: 3 },
-    TO: { delta: 1, yards: 6 },
-  },
-  FG: {
-    SR: { delta: 0, yards: 0 },
-    LR: { delta: 0, yards: 0 },
-    SP: { delta: 0, yards: 0 },
-    LP: { delta: 0, yards: 0 },
-    TP: { delta: 0, yards: 0 },
-    HM: { delta: 0, yards: 0 },
-    FG: { delta: 0, yards: 0 },
-    PT: { delta: 0, yards: 0 },
-    TO: { delta: 0, yards: 0 },
-  },
-  PT: {
-    SR: { delta: 0, yards: 35 },
-    LR: { delta: 0, yards: 35 },
-    SP: { delta: 0, yards: 35 },
-    LP: { delta: 0, yards: 35 },
-    TP: { delta: 0, yards: 35 },
-    HM: { delta: 0, yards: 35 },
-    FG: { delta: 0, yards: 35 },
-    PT: { delta: 0, yards: 35 },
-    TO: { delta: 0, yards: 35 },
-  },
-  TO: {
-    SR: { delta: 0, yards: 0 },
-    LR: { delta: 0, yards: 0 },
-    SP: { delta: 0, yards: 0 },
-    LP: { delta: 0, yards: 0 },
-    TP: { delta: 0, yards: 0 },
-    HM: { delta: 0, yards: 0 },
-    FG: { delta: 0, yards: 0 },
-    PT: { delta: 0, yards: 0 },
-    TO: { delta: 0, yards: 0 },
-  },
-};
+export class RuleNotImplementedError extends Error {
+  constructor(public readonly ruleId: string, message: string) {
+    super(message);
+    this.name = 'RuleNotImplementedError';
+  }
+}
+
+export function assertRuleImplemented(ruleId: string) {
+  if (OPEN_RULE_IDS.includes(ruleId as (typeof OPEN_RULE_IDS)[number])) {
+    throw new RuleNotImplementedError(ruleId, `Rule ${ruleId} is marked OPEN in FOOTBORED_RULES.md`);
+  }
+}
+
+function isStandardPlay(type: PlayType): type is StandardPlayType {
+  return STANDARD_PLAYS.includes(type as StandardPlayType);
+}
+
+function hashToIndex(seed: string, max: number): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0) % max;
+}
 
 export class GameEngine {
   state: ServerGameState;
@@ -257,7 +198,25 @@ export class GameEngine {
       return;
     }
 
-    const outcome = this.evaluateMatchup(offenseCard, defenseCard, offenseSide);
+    let outcome: MatchupResult;
+    try {
+      outcome = this.evaluateMatchup(offenseCard, defenseCard, offenseSide);
+    } catch (error) {
+      if (error instanceof RuleNotImplementedError) {
+        outcome = {
+          delta: 0,
+          yards: 0,
+          message: `OPEN RULE BLOCKED (${error.ruleId}): ${error.message}`,
+          keepOffenseCard: true,
+          keepDefenseCard: true,
+          noDownProgress: true,
+          multiplierCard: 'OPEN',
+          yardCard: 0,
+        };
+      } else {
+        throw error;
+      }
+    }
 
     if (outcome.keepOffenseCard) {
       offenseHand.returnCardToHand(offenseCard);
@@ -267,7 +226,6 @@ export class GameEngine {
     }
 
     const isTouchdown = this.applyBallAndPossession(outcome.yards, offenseSide, outcome);
-
     const isTurnover = outcome.forceTurnover || this.applyDownAndDistance(offenseSide, outcome, isTouchdown);
 
     if (!outcome.noClockTick) {
@@ -282,8 +240,8 @@ export class GameEngine {
       isTouchdown,
       isTurnover,
       isSafety: false,
-      multiplierCard: 'N/A',
-      yardCard: Math.abs(outcome.yards),
+      multiplierCard: outcome.multiplierCard ?? 'N/A',
+      yardCard: outcome.yardCard ?? Math.abs(outcome.yards),
       message: outcome.message,
     };
 
@@ -309,6 +267,8 @@ export class GameEngine {
         keepDefenseCard: true,
         noDownProgress: true,
         noClockTick: true,
+        multiplierCard: 'TO',
+        yardCard: 0,
       };
     }
 
@@ -320,16 +280,20 @@ export class GameEngine {
           message: 'Illegal punt on non-4th down. Turnover on downs.',
           forceTurnover: true,
           noDownProgress: true,
+          multiplierCard: 'PT',
+          yardCard: 0,
         };
       }
-      const matrix = MATCHUP_MATRIX.PT[defenseCard.type];
+
       return {
-        delta: matrix.delta,
-        yards: matrix.yards,
-        message: `Punt for ${matrix.yards} yards.`,
+        delta: 0,
+        yards: 35,
+        message: 'Punt for 35 yards.',
         forceTurnover: true,
         keepDefenseCard: true,
         noDownProgress: true,
+        multiplierCard: 'PT',
+        yardCard: 35,
       };
     }
 
@@ -349,6 +313,8 @@ export class GameEngine {
           message: `Field goal good from ${distance} yards.`,
           fieldGoalAttempt: true,
           noDownProgress: true,
+          multiplierCard: 'FG',
+          yardCard: 0,
         };
       }
 
@@ -358,15 +324,224 @@ export class GameEngine {
         message: `Field goal missed from ${distance} yards.`,
         forceTurnover: true,
         noDownProgress: true,
+        multiplierCard: 'FG',
+        yardCard: 0,
       };
     }
 
-    const matrixResult = MATCHUP_MATRIX[offenseCard.type][defenseCard.type];
+    const turnSeed = this.createTurnSeed(offenseCard.type, defenseCard.type);
+
+    if (offenseCard.type === 'TP') {
+      return this.resolveTrickPlay(turnSeed);
+    }
+
+    if (offenseCard.type === 'HM') {
+      return this.resolveHailMary(turnSeed);
+    }
+
+    if (isStandardPlay(offenseCard.type) && isStandardPlay(defenseCard.type)) {
+      return this.resolveStandardPlay(offenseCard.type, defenseCard.type, turnSeed);
+    }
+
+    // Standard offense against non-standard defense defaults to neutral quality.
+    if (isStandardPlay(offenseCard.type)) {
+      return this.resolveStandardPlay(offenseCard.type, offenseCard.type, `${turnSeed}|fallback`);
+    }
+
     return {
-      delta: matrixResult.delta,
-      yards: matrixResult.yards,
-      message: `${offenseCard.name} vs ${defenseCard.name}: ${matrixResult.yards >= 0 ? '+' : ''}${matrixResult.yards} yards.`,
+      delta: 0,
+      yards: 0,
+      message: `${offenseCard.name} vs ${defenseCard.name}: no gain.`,
+      multiplierCard: 'N/A',
+      yardCard: 0,
     };
+  }
+
+  private resolveStandardPlay(offense: StandardPlayType, defense: StandardPlayType, seed: string): MatchupResult {
+    const quality = STANDARD_QUALITY_MATRIX[offense][defense];
+    const multiplierCard = MULTIPLIER_SEQUENCE[hashToIndex(`${seed}|mult`, MULTIPLIER_SEQUENCE.length)];
+    const multiplier = MULTIPLIER_TABLE[multiplierCard][quality];
+
+    let yardCard = YARD_CARD_SEQUENCE[hashToIndex(`${seed}|yard`, YARD_CARD_SEQUENCE.length)];
+    if (!Number.isInteger(yardCard * multiplier) && yardCard % 2 !== 0) {
+      yardCard = (yardCard + 1) % YARD_CARD_SEQUENCE.length;
+    }
+
+    if (!Number.isInteger(yardCard * multiplier)) {
+      assertRuleImplemented('R-MULT-002');
+    }
+
+    let yards = yardCard * multiplier;
+    let forceTurnover = false;
+
+    if (offense === defense) {
+      const branchFlip = hashToIndex(`${seed}|same-branch`, 2) === 1;
+      if (multiplierCard === 'K') {
+        if (branchFlip) {
+          yards = 25;
+        } else {
+          yards = -10;
+          forceTurnover = true;
+        }
+      } else if (multiplierCard === 'Q') {
+        yards = branchFlip ? yards * 3 : 0;
+      } else if (multiplierCard === 'J') {
+        yards = branchFlip ? 0 : yards * -3;
+      } else {
+        if (branchFlip) {
+          forceTurnover = true;
+        }
+        yards = 0;
+      }
+    }
+
+    return {
+      delta: QUALITY_DELTA[quality],
+      yards,
+      forceTurnover,
+      message: `${offense} vs ${defense} -> ${quality} (${multiplierCard}) for ${yards >= 0 ? '+' : ''}${yards} yards.`,
+      multiplierCard,
+      yardCard,
+    };
+  }
+
+  private resolveTrickPlay(seed: string): MatchupResult {
+    const outcome = TRICK_PLAY_OUTCOME_TABLE[hashToIndex(`${seed}|tp`, TRICK_PLAY_OUTCOME_TABLE.length)];
+    return this.resolveTrickOutcome(outcome);
+  }
+
+  private resolveTrickOutcome(outcome: TrickPlayOutcomeCode): MatchupResult {
+    if (outcome === 'OWN_PENALTY_15') {
+      assertRuleImplemented('R-TP-002');
+    }
+
+    if (outcome === 'LR_PLUS_5') {
+      return {
+        delta: 2,
+        yards: 11,
+        message: 'Trick play hit: Long Run +5 equivalent.',
+        multiplierCard: 'TP',
+        yardCard: 11,
+      };
+    }
+
+    if (outcome === 'LP_PLUS_5') {
+      return {
+        delta: 2,
+        yards: 17,
+        message: 'Trick play hit: Long Pass +5 equivalent.',
+        multiplierCard: 'TP',
+        yardCard: 17,
+      };
+    }
+
+    if (outcome === 'X4_GAIN') {
+      return {
+        delta: 3,
+        yards: 20,
+        message: 'Trick play spike: x4 gain outcome.',
+        multiplierCard: 'TP',
+        yardCard: 20,
+      };
+    }
+
+    if (outcome === 'NEG_X3') {
+      return {
+        delta: -3,
+        yards: -12,
+        message: 'Trick play blown up: -3x outcome.',
+        multiplierCard: 'TP',
+        yardCard: 12,
+      };
+    }
+
+    return {
+      delta: 3,
+      yards: 25,
+      message: 'Trick play jackpot: offense big play.',
+      multiplierCard: 'TP',
+      yardCard: 25,
+    };
+  }
+
+  private resolveHailMary(seed: string): MatchupResult {
+    const outcome = HAIL_MARY_OUTCOME_TABLE[hashToIndex(`${seed}|hm`, HAIL_MARY_OUTCOME_TABLE.length)];
+    return this.resolveHailMaryOutcome(outcome);
+  }
+
+  private resolveHailMaryOutcome(outcome: HailMaryOutcomeCode): MatchupResult {
+    if (outcome === 'ZERO_GAIN') {
+      return {
+        delta: -1,
+        yards: 0,
+        message: 'Hail Mary falls incomplete.',
+        multiplierCard: 'HM',
+        yardCard: 0,
+      };
+    }
+
+    if (outcome === 'GAIN_20') {
+      return {
+        delta: 1,
+        yards: 20,
+        message: 'Hail Mary connects for +20.',
+        multiplierCard: 'HM',
+        yardCard: 20,
+      };
+    }
+
+    if (outcome === 'GAIN_40') {
+      return {
+        delta: 2,
+        yards: 40,
+        message: 'Hail Mary bomb for +40.',
+        multiplierCard: 'HM',
+        yardCard: 40,
+      };
+    }
+
+    if (outcome === 'TOUCHDOWN') {
+      return {
+        delta: 3,
+        yards: 100,
+        message: 'Hail Mary touchdown outcome.',
+        multiplierCard: 'HM',
+        yardCard: 100,
+      };
+    }
+
+    if (outcome === 'SACK_MINUS_10') {
+      return {
+        delta: -2,
+        yards: -10,
+        message: 'Hail Mary sack for -10.',
+        multiplierCard: 'HM',
+        yardCard: 10,
+      };
+    }
+
+    return {
+      delta: -3,
+      yards: 0,
+      forceTurnover: true,
+      message: 'Hail Mary intercepted at the spot.',
+      multiplierCard: 'HM',
+      yardCard: 0,
+    };
+  }
+
+  private createTurnSeed(offenseType: PlayType, defenseType: PlayType): string {
+    const { quarter, clockSeconds, down, toGo, ballOn } = this.state.field;
+    return [
+      this.state.roomId,
+      quarter,
+      clockSeconds,
+      down,
+      toGo,
+      ballOn,
+      offenseType,
+      defenseType,
+    ].join('|');
   }
 
   private applyBallAndPossession(yards: number, offenseSide: TeamSide, outcome: MatchupResult): boolean {
@@ -510,5 +685,31 @@ export class GameEngine {
 }
 
 export function resolvePlayMatchup(offType: PlayType, defType: PlayType): { delta: number; yards: number } {
-  return MATCHUP_MATRIX[offType][defType];
+  if (isStandardPlay(offType) && isStandardPlay(defType)) {
+    const quality: PlayQuality = STANDARD_QUALITY_MATRIX[offType][defType];
+    const multiplier = MULTIPLIER_TABLE.K[quality];
+    const yardCard = 4;
+    return {
+      delta: QUALITY_DELTA[quality],
+      yards: yardCard * multiplier,
+    };
+  }
+
+  if (offType === 'PT') {
+    return { delta: 0, yards: 35 };
+  }
+
+  if (offType === 'FG' || offType === 'TO') {
+    return { delta: 0, yards: 0 };
+  }
+
+  if (offType === 'HM') {
+    return { delta: 1, yards: 20 };
+  }
+
+  if (offType === 'TP') {
+    return { delta: 2, yards: 11 };
+  }
+
+  return { delta: 0, yards: 0 };
 }

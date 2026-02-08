@@ -111,6 +111,8 @@ async function main() {
   const seenResolutionKeys = new Set<string>();
   const submittedTurnKey = new Map<string, string>([['home', ''], ['away', '']]);
   let hasRejoined = false;
+  const readHomeState = (): ClientState | null => homeState;
+  const readAwayState = (): ClientState | null => awayState;
 
   const handleState = (label: 'home' | 'away', state: ClientState) => {
     assert(state.field.ballOn >= 0 && state.field.ballOn <= 100, 'ballOn out of range');
@@ -160,10 +162,11 @@ async function main() {
         home.on('GAME_STATE_UPDATE', (state: ClientState) => handleState('home', state));
       }
 
-      if (homeState && (homeState.phase === GamePhase.OFFENSE_SELECT || homeState.phase === GamePhase.DEFENSE_SELECT) && !homeState.waitingForOpponent) {
-        const turnKey = `${homeState.field.quarter}:${homeState.field.clockSeconds}:${homeState.field.down}:${homeState.field.toGo}:${homeState.field.ballOn}`;
+      const currentHomeState = readHomeState();
+      if (currentHomeState && (currentHomeState.phase === GamePhase.OFFENSE_SELECT || currentHomeState.phase === GamePhase.DEFENSE_SELECT) && !currentHomeState.waitingForOpponent) {
+        const turnKey = `${currentHomeState.field.quarter}:${currentHomeState.field.clockSeconds}:${currentHomeState.field.down}:${currentHomeState.field.toGo}:${currentHomeState.field.ballOn}`;
         if (submittedTurnKey.get('home') !== turnKey) {
-          const cardId = chooseCard(homeState);
+          const cardId = chooseCard(currentHomeState);
           if (cardId) {
             submittedTurnKey.set('home', turnKey);
             home.emit('PLAY_CARD', { roomId, cardId });
@@ -171,10 +174,11 @@ async function main() {
         }
       }
 
-      if (awayState && (awayState.phase === GamePhase.OFFENSE_SELECT || awayState.phase === GamePhase.DEFENSE_SELECT) && !awayState.waitingForOpponent) {
-        const turnKey = `${awayState.field.quarter}:${awayState.field.clockSeconds}:${awayState.field.down}:${awayState.field.toGo}:${awayState.field.ballOn}`;
+      const currentAwayState = readAwayState();
+      if (currentAwayState && (currentAwayState.phase === GamePhase.OFFENSE_SELECT || currentAwayState.phase === GamePhase.DEFENSE_SELECT) && !currentAwayState.waitingForOpponent) {
+        const turnKey = `${currentAwayState.field.quarter}:${currentAwayState.field.clockSeconds}:${currentAwayState.field.down}:${currentAwayState.field.toGo}:${currentAwayState.field.ballOn}`;
         if (submittedTurnKey.get('away') !== turnKey) {
-          const cardId = chooseCard(awayState);
+          const cardId = chooseCard(currentAwayState);
           if (cardId) {
             submittedTurnKey.set('away', turnKey);
             away.emit('PLAY_CARD', { roomId, cardId });

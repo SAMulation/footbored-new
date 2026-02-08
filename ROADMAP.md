@@ -43,6 +43,14 @@
   - Expanded possession/scoring edge cases and special teams behavior.
   - Balance tuning for play matrix and yardage spread.
   - Explicit game-end handling and winner messaging consistency.
+- Implemented vs OPEN (current):
+  - Implemented:
+    - Canonical standard quality matrix (`SR/LR/SP/LP`).
+    - Canonical multiplier table (`K/Q/J/10` with `B/G/D/O/W`).
+    - Deterministic TP/HM outcome-table routing in engine.
+  - OPEN (intentionally guarded in code):
+    - `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`.
+    - Engine throws explicit rule guard errors for OPEN IDs instead of silently approximating behavior.
 - Exit criteria:
   - Rules test suite covers scoring, turnover, quarter transitions, and game over.
   - No nondeterministic rule outcomes for identical inputs.
