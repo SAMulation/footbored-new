@@ -9,8 +9,14 @@ const socketIoClient: any = require('socket.io-client');
 interface ClientState {
   phase: string;
   waitingForOpponent: boolean;
+  conversion?: {
+    offenseSide: 'home' | 'away';
+    attemptType: 'XP' | '2PT' | null;
+    mandatoryTwoPoint: boolean;
+  } | null;
   myState: {
     hand: Array<{ id: string; type: PlayType }>;
+    specialActions?: Array<{ id: string; type: PlayType; enabled: boolean }>;
   };
   field: {
     ballOn: number;
@@ -26,6 +32,17 @@ interface ClientState {
 }
 
 function chooseCard(state: ClientState): string | undefined {
+  const specialActions = state.myState.specialActions ?? [];
+  const specialId = (type: PlayType) =>
+    specialActions.find((action) => action.type === type && action.enabled)?.id;
+
+  if (state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    if (state.conversion?.mandatoryTwoPoint) {
+      return specialId('2PT') ?? undefined;
+    }
+    return specialId('XP') ?? specialId('2PT') ?? undefined;
+  }
+
   const hand = state.myState.hand;
   if (hand.length === 0) return undefined;
   const nonTimeout = hand.find((card) => card.type !== 'TO');
@@ -134,7 +151,12 @@ test('quick play bot resolves repeated turns without stalling', async () => {
       if (state) {
         assert(state.field.ballOn >= 0 && state.field.ballOn <= 100);
 
-        if ((state.phase === GamePhase.OFFENSE_SELECT || state.phase === GamePhase.DEFENSE_SELECT) && !state.waitingForOpponent) {
+        if ((
+          state.phase === GamePhase.OFFENSE_SELECT
+            || state.phase === GamePhase.DEFENSE_SELECT
+            || state.phase === GamePhase.CONVERSION_OFFENSE_SELECT
+            || state.phase === GamePhase.CONVERSION_DEFENSE_SELECT
+        ) && !state.waitingForOpponent) {
           const turnKey = `${state.field.quarter}:${state.field.clockSeconds}:${state.field.down}:${state.field.toGo}:${state.field.ballOn}`;
           if (submittedTurnKey !== turnKey) {
             const cardId = chooseCard(state);

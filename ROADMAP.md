@@ -49,11 +49,13 @@
     - Canonical standard quality matrix (`SR/LR/SP/LP`).
     - Canonical multiplier table (`K/Q/J/10` with `B/G/D/O/W`).
     - Deterministic TP/HM outcome-table routing in engine.
-    - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`, `R-CLK-005`, `R-KICK-001`, `R-KICK-002`.
+    - Interactive post-TD conversion flow (`XP`/`2PT`) with mandatory 2-point enforcement in OT3/OT4.
+    - OT resource refresh buckets at `OT1/3/5...` with transparent reset flags.
+    - OPEN-rule closures for `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, `R-FLD-004`, `R-CLK-005`, `R-KICK-001`, `R-KICK-002`, `R-OT-003`.
     - Zero-second play window handling and college overtime staging.
   - OPEN (intentionally guarded in code):
     - No kick/clock guardrail IDs remain in `OPEN_RULE_IDS`.
-    - Remaining unresolved canonical items are documented in `FOOTBORED_RULES.md` and assumption-gated where needed.
+    - Remaining unresolved canonical items (board-authentic conversion/kick distributions, half-distance precision) are documented in `FOOTBORED_RULES.md` and assumption-gated where needed.
 - Exit criteria:
   - Rules test suite covers scoring, turnover, quarter transitions, and game over.
   - No nondeterministic rule outcomes for identical inputs.
@@ -97,9 +99,9 @@
     - No layout overflow issues in Chrome and Safari web builds.
 
 ## Immediate Next Commit Checklist
-- Add reconnect-safe room state restoration and rejoin UX.
-- Add richer game-over details (per-play recap and quick rematch pairing behavior).
-- Expand UI tests around room/join/replay and action-button legality.
+- Replace assumption-backed conversion/kick tables with recovered board-authentic values once artifacts are verified.
+- Add reconnect scenario coverage to socket regression for long-lived rooms.
+- Add conversion-focused UI polish (explicit XP/2PT disabled reasons and recap badges).
 
 ## UX Roadmap Pointer
 - Browser UI/UX execution details are now tracked in `/Users/sam/Downloads/Projects/footbored-new/UX_ROADMAP.md`.

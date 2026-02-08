@@ -46,17 +46,73 @@ test('OT stage rules enforce shootout restrictions from period 5', () => {
   }
 });
 
-test('OT period grants one HM to each side', () => {
+test('OT resource buckets refresh HM and timeouts at OT1/OT3 only', () => {
   const engine = new GameEngine('OT-HM-REFRESH');
   engine.startGame();
 
   engine.state.players.home.hailMaryCount = 0;
   engine.state.players.away.hailMaryCount = 0;
+  engine.state.players.home.timeouts = 0;
+  engine.state.players.away.timeouts = 0;
 
   (engine as any).enterOvertimePeriod(1);
 
-  assert.equal(engine.state.players.home.hailMaryCount, 1);
-  assert.equal(engine.state.players.away.hailMaryCount, 1);
+  assert.equal(engine.state.players.home.hailMaryCount, 2);
+  assert.equal(engine.state.players.away.hailMaryCount, 2);
+  assert.equal(engine.state.players.home.timeouts, 1);
+  assert.equal(engine.state.players.away.timeouts, 1);
+
+  engine.state.players.home.hailMaryCount = 0;
+  engine.state.players.away.hailMaryCount = 0;
+  engine.state.players.home.timeouts = 0;
+  engine.state.players.away.timeouts = 0;
+
+  (engine as any).enterOvertimePeriod(2);
+  assert.equal(engine.state.players.home.hailMaryCount, 0);
+  assert.equal(engine.state.players.away.hailMaryCount, 0);
+  assert.equal(engine.state.players.home.timeouts, 0);
+  assert.equal(engine.state.players.away.timeouts, 0);
+
+  (engine as any).enterOvertimePeriod(3);
+  assert.equal(engine.state.players.home.hailMaryCount, 2);
+  assert.equal(engine.state.players.away.hailMaryCount, 2);
+  assert.equal(engine.state.players.home.timeouts, 1);
+  assert.equal(engine.state.players.away.timeouts, 1);
+});
+
+test('OT bucket reset flag is surfaced on first play after reset', () => {
+  const engine = new GameEngine('OT-BUCKET-FLAG');
+  engine.startGame();
+
+  (engine as any).enterOvertimePeriod(1);
+  (engine as any).evaluateMatchup = () => ({
+    delta: 0,
+    yards: 0,
+    message: 'Bucket check play',
+    multiplierCard: 'K',
+    yardCard: 0,
+  });
+
+  const offCard = engine.state.players.home.hand[0]?.id;
+  const defCard = engine.state.players.away.hand[0]?.id;
+  assert(offCard && defCard);
+
+  engine.submitMove('home', offCard);
+  const firstResolved = engine.submitMove('away', defCard);
+  assert.equal(firstResolved.accepted, true);
+  assert.equal(firstResolved.resolved, true);
+  assert.equal(engine.state.lastPlay?.flags?.otBucketReset, true);
+
+  engine.advanceAfterResolution();
+  const offCard2 = engine.state.players.home.hand[0]?.id;
+  const defCard2 = engine.state.players.away.hand[0]?.id;
+  assert(offCard2 && defCard2);
+
+  engine.submitMove('home', offCard2);
+  const secondResolved = engine.submitMove('away', defCard2);
+  assert.equal(secondResolved.accepted, true);
+  assert.equal(secondResolved.resolved, true);
+  assert.equal(engine.state.lastPlay?.flags?.otBucketReset, false);
 });
 
 test('zero-second play end/extend logic supports def penalty and touchback flags', () => {

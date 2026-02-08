@@ -10,6 +10,8 @@ test('rule assumptions config is loaded and frozen', () => {
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.punt), true);
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.fieldGoal), true);
   assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.fieldGoal.distanceBands), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.conversion), true);
+  assert.equal(Object.isFrozen(RULE_ASSUMPTIONS.overtime), true);
 });
 
 test('field-goal distance bands are monotonic and bounded', () => {
@@ -38,4 +40,15 @@ test('kick assumptions stay in legal football ranges', () => {
   assert(RULE_ASSUMPTIONS.fieldGoal.icingPenalty < 1);
   assert(RULE_ASSUMPTIONS.fieldGoal.longShotSuccessRate >= 0);
   assert(RULE_ASSUMPTIONS.fieldGoal.longShotSuccessRate <= 1);
+
+  assert(RULE_ASSUMPTIONS.conversion.xpSuccessRate > 0);
+  assert(RULE_ASSUMPTIONS.conversion.xpSuccessRate < 1);
+  assert(RULE_ASSUMPTIONS.conversion.twoPointRequiredYards >= 1);
+  assert(RULE_ASSUMPTIONS.conversion.twoPointRequiredYards <= 5);
+
+  assert.equal(RULE_ASSUMPTIONS.overtime.refreshPolicy, 'TWO_PERIOD_BUCKET');
+  assert(RULE_ASSUMPTIONS.overtime.bucketPeriodSize >= 2);
+  assert(RULE_ASSUMPTIONS.overtime.hailMaryPerBucket >= 1);
+  assert(RULE_ASSUMPTIONS.overtime.timeoutsPerBucket >= 0);
+  assert(RULE_ASSUMPTIONS.overtime.mandatoryTwoPointStartPeriod < RULE_ASSUMPTIONS.overtime.shootoutStartPeriod);
 });

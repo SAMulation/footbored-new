@@ -36,3 +36,15 @@ This file is append-only and tracks provisional implementation assumptions used 
 - Rationale: "Ice the kicker" exists in board guidance but lacks explicit mechanics; deterministic penalty model is explicit and testable.
 - Verification: `server/src/__tests__/field-goal-icing.test.ts`
 - Status: ACTIVE
+
+### 2026-02-08 - R-CONV-001 / R-OT-003 (Interactive Conversions)
+- Decision: Touchdowns in regulation and OT1-4 enter an interactive conversion flow. Offense chooses `XP` or `2PT`; `XP` resolves deterministically at `0.93` success. `2PT` resolves as offense-vs-defense standard play calls and succeeds when resulting yards are `>=2`.
+- Rationale: Canonical sources require post-touchdown conversion behavior and mandatory 2-point attempts from 3OT onward, but exact probabilities/mechanics are incomplete in recovered artifacts.
+- Verification: `server/src/__tests__/conversion-flow.test.ts`
+- Status: ACTIVE
+
+### 2026-02-08 - R-DECK-005 / OT Resource Cadence
+- Decision: Overtime resources refresh in two-period buckets (`OT1/3/5/...`) with `HM=2` and `TO=1` per team at bucket start. No refresh occurs at `OT2/4/6/...`.
+- Rationale: Source material conflicts on OT refresh cadence; bucketed reset keeps parity intent explicit and deterministic until board-era values are fully recovered.
+- Verification: `server/src/__tests__/overtime-clock.test.ts`
+- Status: ACTIVE

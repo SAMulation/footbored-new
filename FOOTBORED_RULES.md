@@ -88,10 +88,10 @@ This document:
 **Implementation Gate:** Approved for coding.
 
 **Rule ID:** `R-DECK-005`  
-**Canonical Statement:** Overtime uses college-style possessions with one `HM` refresh per OT period, no timeout refresh dependency, and OT stage progression (`OT1-2` normal start at 25, `OT3-4` mandatory 2-point context, `OT5+` 2-point shootout only).  
+**Canonical Statement:** Overtime resources refresh in two-period buckets (`OT1/3/5...`) with assumption-backed per-bucket counts (`HM=2`, `TO=1`) and OT stage progression (`OT1-2` normal start at 25, `OT3-4` mandatory 2-point context, `OT5+` 2-point shootout only).  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
 **Confidence:** `IMPLEMENTED`  
-**Conflict Notes:** Conflicting legacy wording resolved by explicit implementation choice for current prototype.  
+**Conflict Notes:** Conflicting legacy wording resolved by explicit bucket policy in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.  
 **Implementation Gate:** Implemented.
 
 ### Standard Play Quality Matrix
@@ -317,9 +317,24 @@ This document:
 **Rule ID:** `R-OT-003`  
 **Canonical Statement:** Starting in 3OT, teams MUST attempt two-point conversions after touchdowns.  
 **Sources:** `SRC-BOARD-01`, `SRC-AI-01`  
-**Confidence:** `LIKELY`  
-**Conflict Notes:** Two-point conversion base system details outside 3OT trigger remain open.  
-**Implementation Gate:** confirm before coding.
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Base conversion math is assumptions-led (`XP` deterministic rate + interactive `2PT` play-call resolution) pending board-era probability recovery.  
+**Implementation Gate:** Implemented.
+
+### Conversions (`XP`, `2PT`)
+**Rule ID:** `R-CONV-001`  
+**Canonical Statement:** Every touchdown in regulation and OT1-4 MUST enter an interactive conversion sequence before kickoff (regulation) or possession end (overtime).  
+**Sources:** `SRC-BOARD-01`, `SRC-AI-01`, `SRC-CODE-01`  
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Legacy artifacts confirm conversion concepts but not full baseline procedure; current prototype behavior is assumption-backed and traceable.  
+**Implementation Gate:** Implemented.
+
+**Rule ID:** `R-CONV-002`  
+**Canonical Statement:** Conversion options MUST be offense-selected (`XP` or `2PT` unless mandatory-2PT). `XP` uses deterministic success-rate assumptions; `2PT` resolves offense-vs-defense play calls in short-yardage context.  
+**Sources:** `SRC-BOARD-01`, `SRC-AI-01`, `SRC-CODE-01`  
+**Confidence:** `IMPLEMENTED`  
+**Conflict Notes:** Exact board-era rates are unresolved; current values are tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.  
+**Implementation Gate:** Implemented.
 
 ### Kicking Systems (`FG`, `PT`, Kickoff)
 **Rule ID:** `R-KICK-001`  
@@ -346,7 +361,7 @@ This document:
 
 ### Documentation Quality Scenarios
 **Rule ID:** `R-DOC-001`  
-**Canonical Statement:** Canonical coverage MUST include all play codes `SR/LR/SP/LP/TP/HM/FG/PT/TO` in confirmed or open form.  
+**Canonical Statement:** Canonical coverage MUST include all play codes `SR/LR/SP/LP/TP/HM/FG/PT/TO/XP/2PT` in confirmed or open form.  
 **Sources:** `SRC-BOARD-01`, `SRC-IMG-01`, `SRC-AI-01`  
 **Confidence:** `CONFIRMED`  
 **Conflict Notes:** None.  
@@ -402,24 +417,24 @@ This document:
    - **Required confirmation:** Lock rounding formula (`floor`, `ceil`, etc.).
    - **Implementation Gate:** confirm before coding.
 
-8. **Safety and conversion details**
-   - **What is unknown:** Safety handling and complete PAT/2-point baseline outside explicit 3OT requirement.
-   - **Conflicting evidence:** Overtime note references 2-point requirement, but full conversion system is not fully documented.
-   - **Required confirmation:** Define baseline PAT/2PT process and safety transitions.
-   - **Implementation Gate:** confirm before coding.
+8. **Board-authentic conversion rates and outcomes**
+   - **What is unknown:** Final board-era PAT and 2-point success distributions and any additional edge behaviors.
+   - **Conflicting evidence:** Sources confirm conversion concepts and 3OT mandatory two-point context, but exact probability tables are incomplete.
+   - **Required confirmation:** Recover/confirm canonical conversion probabilities to replace assumption values.
+   - **Implementation Gate:** confirm before replacing assumptions.
 
-9. **OT inventory reset cadence**
-   - **What is unknown:** Exact HM/TO resets per OT period versus OT buckets.
-   - **Conflicting evidence:** Summary text contains internal conflict.
-   - **Required confirmation:** Confirm authoritative OT bucket/reset scheme.
-   - **Implementation Gate:** confirm before coding.
+9. **OT bucket resource quantities**
+   - **What is unknown:** Exact board-authentic HM/TO quantity values for each OT resource bucket.
+   - **Conflicting evidence:** Legacy notes conflict between per-period and per-bucket language.
+   - **Required confirmation:** Recover primary-source OT inventory values to replace current assumptions.
+   - **Implementation Gate:** confirm before replacing assumptions.
 
 ## Non-Canonical Current Prototype Snapshot
 Current prototype behavior in `/Users/sam/Downloads/Projects/footbored-new/server/src/engine.ts` diverges from canonical rules in these major ways:
 
 1. Kicking (`FG/PT/Kickoff`) and icing are implemented with explicit assumptions, not fully recovered board-era tables.
 2. Standard-card usage remains hand-draw driven in runtime with virtual specials, not yet a strict board inventory-only flow.
-3. Some advanced football detail remains assumption-based or partial: conversion baseline outside OT rules, half-distance semantics, and full OT inventory cadence.
+3. Some advanced football detail remains assumption-based or partial: conversion probability tables, half-distance semantics, and board-authentic OT bucket quantities.
 4. Determinism is hash-seeded and replay-safe for multiplayer, but still models inferred procedure where source text is incomplete.
 
 These prototype behaviors MUST be treated as temporary implementation state, not canon.
@@ -432,8 +447,11 @@ These prototype behaviors MUST be treated as temporary implementation state, not
 - **2026-02-08:** Locked OPEN resolution policies for rounding, same-play fallback, TP handling, safety semantics, and offense-forward coordinate modeling.
 - **2026-02-08:** Adopted college-style overtime staging for prototype (`OT1-2` normal, `OT3-4` mandatory conversion context, `OT5+` shootout).
 - **2026-02-08:** Closed `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` in code using explicit assumptions tracked in `/Users/sam/Downloads/Projects/footbored-new/ASSUMPTIONS.md`.
+- **2026-02-08:** Implemented interactive touchdown conversion flow (`R-CONV-001`, `R-CONV-002`) and mandatory 2-point enforcement from OT3 (`R-OT-003`).
+- **2026-02-08:** Switched OT HM/timeout refresh to two-period bucket cadence (`OT1/3/5...`) with explicit assumption tracking.
 
 ## Change Log
 - **2026-02-08:** Initial creation of canonical rules reference (`v1.0` baseline).
 - **2026-02-08:** Promoted `R-DECK-005`, `R-MULT-002`, `R-SAME-003`, `R-TP-002`, `R-TP-003`, `R-FLD-003`, and `R-FLD-004` from OPEN to IMPLEMENTED.
 - **2026-02-08:** Promoted `R-CLK-002`, `R-CLK-005`, `R-KICK-001`, and `R-KICK-002` to IMPLEMENTED (assumption-backed closures).
+- **2026-02-08:** Promoted `R-OT-003`, `R-CONV-001`, and `R-CONV-002` to IMPLEMENTED (assumption-backed closures).

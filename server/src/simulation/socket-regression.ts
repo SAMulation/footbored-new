@@ -8,6 +8,11 @@ const socketIoClient: any = require('socket.io-client');
 interface ClientState {
   phase: string;
   waitingForOpponent: boolean;
+  conversion?: {
+    offenseSide: 'home' | 'away';
+    attemptType: 'XP' | '2PT' | null;
+    mandatoryTwoPoint: boolean;
+  } | null;
   myState: {
     hand: Array<{ id: string; type: PlayType }>;
     specialActions?: Array<{ id: string; type: PlayType; enabled: boolean }>;
@@ -30,10 +35,18 @@ interface ClientState {
 
 function chooseCard(state: ClientState): string | undefined {
   const hand = state.myState.hand;
-  if (hand.length === 0) return undefined;
   const specialActions = state.myState.specialActions ?? [];
-  const specialId = (type: 'TP' | 'HM' | 'FG' | 'PT') =>
+  const specialId = (type: PlayType) =>
     specialActions.find((action) => action.type === type && action.enabled)?.id;
+
+  if (state.phase === GamePhase.CONVERSION_OFFENSE_SELECT) {
+    if (state.conversion?.mandatoryTwoPoint) {
+      return specialId('2PT') ?? undefined;
+    }
+    return specialId('XP') ?? specialId('2PT') ?? undefined;
+  }
+
+  if (hand.length === 0) return undefined;
 
   if (state.field.down === 4) {
     const fieldGoal = specialId('FG');
@@ -68,6 +81,13 @@ function isValidTransition(prev: string | null, next: string): boolean {
     `${GamePhase.DEFENSE_SELECT}->${GamePhase.RESOLUTION}`,
     `${GamePhase.RESOLUTION}->${GamePhase.OFFENSE_SELECT}`,
     `${GamePhase.RESOLUTION}->${GamePhase.DEFENSE_SELECT}`,
+    `${GamePhase.RESOLUTION}->${GamePhase.CONVERSION_OFFENSE_SELECT}`,
+    `${GamePhase.CONVERSION_OFFENSE_SELECT}->${GamePhase.CONVERSION_DEFENSE_SELECT}`,
+    `${GamePhase.CONVERSION_OFFENSE_SELECT}->${GamePhase.CONVERSION_RESOLUTION}`,
+    `${GamePhase.CONVERSION_DEFENSE_SELECT}->${GamePhase.CONVERSION_RESOLUTION}`,
+    `${GamePhase.CONVERSION_RESOLUTION}->${GamePhase.OFFENSE_SELECT}`,
+    `${GamePhase.CONVERSION_RESOLUTION}->${GamePhase.DEFENSE_SELECT}`,
+    `${GamePhase.CONVERSION_RESOLUTION}->${GamePhase.GAME_OVER}`,
     `${GamePhase.RESOLUTION}->${GamePhase.GAME_OVER}`,
     `${GamePhase.OFFENSE_SELECT}->${GamePhase.GAME_OVER}`,
     `${GamePhase.DEFENSE_SELECT}->${GamePhase.GAME_OVER}`,
@@ -215,7 +235,10 @@ async function runTwoPlayerFullGameScenario(url: string, rooms: Map<string, any>
 }
 
 function isSelectablePhase(phase: string): boolean {
-  return phase === GamePhase.OFFENSE_SELECT || phase === GamePhase.DEFENSE_SELECT;
+  return phase === GamePhase.OFFENSE_SELECT
+    || phase === GamePhase.DEFENSE_SELECT
+    || phase === GamePhase.CONVERSION_OFFENSE_SELECT
+    || phase === GamePhase.CONVERSION_DEFENSE_SELECT;
 }
 
 async function runBotQuickPlayFullGameScenario(url: string, rooms: Map<string, any>) {
